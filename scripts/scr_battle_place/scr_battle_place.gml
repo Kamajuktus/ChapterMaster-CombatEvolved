@@ -192,6 +192,11 @@ function EnemySquad(faction, type_data = undefined) constructor {
     // be overridden per unit type with a `falloff` field in faction_unit_types.
     falloff = variable_struct_exists(type_data, "falloff") ? type_data.falloff
             : ((optimal <= 0.2 || optimal >= 0.75) ? 3.5 : 1.6);
+    // Max enemy kills PER MODEL per combat phase: how many marines a single model of this unit can
+    // cut down in one ranged/melee exchange. The squad's per-phase kill budget is model_count *
+    // max_kills. Defaults to 1 (a basic trooper drops at most one marine); tougher/elite units kill
+    // more and can be set explicitly via a `max_kills` field in faction_unit_types.
+    max_kills = variable_struct_exists(type_data, "max_kills") ? type_data.max_kills : 1;
     deployed_this_turn = false; // reinforcements can't be repositioned the turn they arrive
     uid = scr_uuid_generate();
 
@@ -533,6 +538,7 @@ function BattleState(system, planet) constructor {
                     healing: variable_struct_exists(_e, "healing") ? _e.healing : 0,
                     optimal: variable_struct_exists(_e, "optimal") ? _e.optimal : 0.5,
                     falloff: variable_struct_exists(_e, "falloff") ? _e.falloff : 1.6,
+                    max_kills: variable_struct_exists(_e, "max_kills") ? _e.max_kills : 1,
                     models: variable_struct_exists(_e, "models") ? _e.models : 15,
                     dist: variable_struct_exists(_e, "dist") ? _e.dist : 0,
                     deployed_this_turn: variable_struct_exists(_e, "deployed_this_turn") ? _e.deployed_this_turn : false
@@ -605,6 +611,9 @@ function battle_state_from_data(system, planet, data) {
             };
             if (variable_struct_exists(_ed, "falloff")) {
                 _td.falloff = _ed.falloff; // restore saved falloff (else EnemySquad picks a band default)
+            }
+            if (variable_struct_exists(_ed, "max_kills")) {
+                _td.max_kills = _ed.max_kills; // restore saved Max Kills (else EnemySquad defaults to 1)
             }
             var _sq = new EnemySquad(_ed.faction, _td);
             if (variable_struct_exists(_ed, "health")) {
@@ -783,6 +792,24 @@ function weapon_falloff(weapon) {
         return 1.5;
     }
     return 1.1; // bolters / generic guns / rifles: gentle falloff
+}
+
+// A weapon's "Max Kills" -- the most enemies it can cut down in one combat phase. This is the
+// weapon's `spli` (splash) stat, floored at 1, matching the "Max Kills: {max(1, spli)}" shown in
+// the equipment tooltip. Reads it from an EquipmentStruct/artifact directly, otherwise from the
+// global weapons table by name; falls back to 1 for unknown/empty weapons.
+function weapon_max_kills(weapon) {
+    if (is_struct(weapon) && variable_struct_exists(weapon, "spli")) {
+        return max(1, weapon.spli);
+    }
+    var _name = weapon_name_string(weapon);
+    if (_name != "" && variable_struct_exists(global.weapons, _name)) {
+        var _w = global.weapons[$ _name];
+        if (variable_struct_exists(_w, "spli")) {
+            return max(1, _w.spli);
+        }
+    }
+    return 1;
 }
 
 // Weapon effectiveness at a given engagement distance (0 = useless .. 1 = optimal), taken as the
@@ -1022,6 +1049,36 @@ function marine_phase_value(unit, distance, phase) {
     return _best;
 }
 
+// The most enemies a marine can kill in a given phase: the Max Kills of whichever of its weapons
+// is effective in that phase (a sweetspot <= 0.25 is melee, otherwise ranged). Returns 0 if the
+// marine has no weapon that fights in this phase (so it adds nothing to the side's kill budget),
+// except an unarmed marine can still cut down one foe in melee.
+function marine_phase_max_kills(unit, phase) {
+    if (!is_struct(unit) || unit.name() == "" || unit.hp() <= 0) {
+        return 0;
+    }
+    var _weps = [unit.weapon_one(), unit.weapon_two()];
+    var _best = 0;
+    var _has_any = false;
+    for (var w = 0; w < array_length(_weps); w++) {
+        if (weapon_name_string(_weps[w]) == "") {
+            continue;
+        }
+        _has_any = true;
+        var _opts = weapon_optimal_distances(_weps[w]);
+        for (var o = 0; o < array_length(_opts); o++) {
+            var _is_melee_sweet = (_opts[o] <= 0.25);
+            if (phase == "melee" && !_is_melee_sweet) { continue; }
+            if (phase == "ranged" && _is_melee_sweet) { continue; }
+            _best = max(_best, weapon_max_kills(_weps[w]));
+        }
+    }
+    if (_best <= 0 && !_has_any && phase == "melee") {
+        _best = 1; // unarmed marine still kills at most one foe in melee
+    }
+    return _best;
+}
+
 // Living, named members of a squad (by uid).
 function marine_squad_living_members(squad_uid) {
     var _sq = fetch_squad(squad_uid);
@@ -1111,6 +1168,44 @@ function place_enemy_phase_power(place, phase) {
     return _power;
 }
 
+// The marine side's Max Kills budget for a phase: the sum of every living marine's per-phase
+// max kills (plus phase-fitting vehicles). This caps how many enemy MODELS the marines can remove
+// in this phase, so a strong force can't wipe a 10,000-strong horde in a single turn.
+function place_marine_phase_kill_cap(place, phase) {
+    var _cap = 0;
+    var _uids = place.marine_squad_uids();
+    for (var s = 0; s < array_length(_uids); s++) {
+        var _mems = marine_squad_living_members(_uids[s]);
+        for (var m = 0; m < array_length(_mems); m++) {
+            _cap += marine_phase_max_kills(_mems[m], phase);
+        }
+    }
+    // Phase-fitting vehicles each contribute their weapon's max kills (none while vehicles aren't
+    // squad-linked, since place_vehicles is empty, but kept for when that linkage is added).
+    var _vehs = place_vehicles(place);
+    for (var v = 0; v < array_length(_vehs); v++) {
+        var _role = obj_ini.veh_role[_vehs[v][0]][_vehs[v][1]];
+        var _veh_melee = (vehicle_optimal_distance(_role) <= 0.4);
+        if ((phase == "melee") == _veh_melee) {
+            _cap += 5; // a vehicle's heavy weapons can account for several models a phase
+        }
+    }
+    return _cap;
+}
+
+// The enemy side's Max Kills budget for a phase: the sum over phase-fitting enemy squads of
+// model_count * max_kills. Caps how many marines the enemy can cut down in this phase.
+function place_enemy_phase_kill_cap(place, phase) {
+    var _cap = 0;
+    var _en = place.enemy_squads();
+    for (var e = 0; e < array_length(_en); e++) {
+        if ((phase == "melee") == _en[e].is_melee()) {
+            _cap += _en[e].model_count() * _en[e].max_kills;
+        }
+    }
+    return _cap;
+}
+
 // Combined power across both phases (rough comparison / display helpers).
 function place_marine_power(place) {
     return place_marine_phase_power(place, "ranged") + place_marine_phase_power(place, "melee");
@@ -1122,12 +1217,29 @@ function place_enemy_power(place) {
 // --- Damage application -----------------------------------------------------------------
 
 // Spreads damage across the enemy squads in a place; each squad mitigates by its own
-// damage_reduction. Returns total health actually removed (for experience awards).
-function apply_damage_to_enemies(place, damage) {
+// damage_reduction. `kill_cap` limits how many enemy MODELS may be removed (Max Kills): if the
+// damage would kill more than that, it is scaled down so roughly kill_cap models fall. Returns
+// total health actually removed (for experience awards).
+function apply_damage_to_enemies(place, damage, kill_cap = infinity) {
     var _en = place.enemy_squads();
     var _n = array_length(_en);
     if (_n == 0) {
         return 0;
+    }
+    // Estimate how many models the unscaled damage would kill, so we can honour the kill cap.
+    if (kill_cap < infinity) {
+        var _share_sim = damage / _n;
+        var _would_kill = 0;
+        for (var e = 0; e < _n; e++) {
+            var _eu = _en[e];
+            var _net = _share_sim * (1 - _eu.damage_reduction);
+            var _new_health = max(0, _eu.health - _net);
+            var _after = (_new_health <= 0) ? 0 : max(1, round(_eu.models * (_new_health / _eu.max_health)));
+            _would_kill += max(0, _eu.model_count() - _after);
+        }
+        if (_would_kill > kill_cap && _would_kill > 0) {
+            damage *= (kill_cap / _would_kill); // scale damage so ~kill_cap models are removed
+        }
     }
     var _share = damage / _n;
     var _removed = 0;
@@ -1137,8 +1249,10 @@ function apply_damage_to_enemies(place, damage) {
     return _removed;
 }
 
-// Spreads damage across the living marines in a place; kills any reduced to <= 0 hp.
-function apply_damage_to_marines(place, damage) {
+// Spreads damage across the living marines in a place; kills any reduced to <= 0 hp, but no more
+// than `kill_cap` marines may die this phase (the enemy's Max Kills). Marines who would die beyond
+// the cap survive at 1 hp -- the enemy simply couldn't finish that many in one exchange.
+function apply_damage_to_marines(place, damage, kill_cap = infinity) {
     var _members = [];
     var _uids = place.marine_squad_uids();
     for (var s = 0; s < array_length(_uids); s++) {
@@ -1152,11 +1266,17 @@ function apply_damage_to_marines(place, damage) {
         return;
     }
     var _share = damage / _n;
+    var _deaths = 0;
     for (var i = 0; i < _n; i++) {
         var _u = _members[i];
         _u.add_or_sub_health(-_share);
         if (_u.hp() <= 0) {
-            kill_and_recover(_u.company, _u.marine_number, true, true);
+            if (_deaths < kill_cap) {
+                kill_and_recover(_u.company, _u.marine_number, true, true);
+                _deaths++;
+            } else {
+                _u.add_or_sub_health(1 - _u.hp()); // capped: leave the marine clinging on at 1 hp
+            }
         }
     }
 }
@@ -1214,12 +1334,16 @@ function resolve_place_phase(place, phase) {
 
     if (_m_power > 0) {
         var _enemy_damage = _m_power * MARINE_DAMAGE_COEF * random_range(0.8, 1.2);
-        var _removed = apply_damage_to_enemies(place, _enemy_damage);
+        // Max Kills: marines can't remove more enemy models this phase than their weapons allow.
+        var _marine_kill_cap = place_marine_phase_kill_cap(place, phase);
+        var _removed = apply_damage_to_enemies(place, _enemy_damage, _marine_kill_cap);
         award_place_experience(place, _removed);
     }
     if (_e_power > 0) {
         var _marine_damage = _e_power * ENEMY_DAMAGE_COEF * random_range(0.8, 1.2);
-        apply_damage_to_marines(place, _marine_damage);
+        // Max Kills: the enemy can't cut down more marines this phase than their numbers allow.
+        var _enemy_kill_cap = place_enemy_phase_kill_cap(place, phase);
+        apply_damage_to_marines(place, _marine_damage, _enemy_kill_cap);
         // Vehicles draw a large share of the incoming fire (0.85). They are tough but not
         // indestructible -- sustained enemy fire wrecks them over a handful of turns, after which
         // the marines lose that fire support and start taking the casualties themselves.
@@ -1263,6 +1387,9 @@ function repair_battle_enemy_squads(battle_state) {
             };
             if (variable_struct_exists(_e, "falloff")) {
                 _td.falloff = _e.falloff; // preserve any existing falloff (else EnemySquad picks a band default)
+            }
+            if (variable_struct_exists(_e, "max_kills")) {
+                _td.max_kills = _e.max_kills; // preserve any existing Max Kills (else EnemySquad defaults to 1)
             }
             var _faction = variable_struct_exists(_e, "faction") ? _e.faction : battle_state.enemy_faction;
             var _new = new EnemySquad(_faction, _td);
@@ -1452,9 +1579,14 @@ function resolve_enemy_turn(battle_state, planet_data) {
         _cp--;
     }
 
-    // Advance toward the objective with whatever CP remains.
+    // Advance toward the objective ONLY to contest it. Enemies converge on the objective when
+    // marines are trying to hold it, but they never abandon a place: each non-objective place
+    // keeps at least one defending squad. This way an enemy garrison persists in every place
+    // across objective shifts (a place that held, say, one squad keeps it), while surplus forces
+    // can still move to secure the objective whenever the marines press it -- including right
+    // after the objective relocates to fresh ground.
     var _obj = battle_state.objective_place();
-    if (_obj != undefined) {
+    if (_obj != undefined && _obj.marine_count() > 0) {
         for (var i = 0; i < array_length(battle_state.places) && _cp > 0; i++) {
             var P = battle_state.places[i];
             if (P == _obj) {
@@ -1462,6 +1594,9 @@ function resolve_enemy_turn(battle_state, planet_data) {
             }
             var _en = P.enemy_squads();
             for (var e = 0; e < array_length(_en) && _cp > 0; e++) {
+                if (P.enemy_count() <= 1) {
+                    break; // leave a defender behind -- never strip a place bare
+                }
                 if (_en[e].deployed_this_turn) {
                     continue; // just arrived this turn -- can't move on yet
                 }
