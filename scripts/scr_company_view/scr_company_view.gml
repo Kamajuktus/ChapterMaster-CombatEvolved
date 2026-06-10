@@ -133,7 +133,7 @@ function add_vehicle_to_manage_arrays(unit) {
 }
 
 function scr_company_view(company) {
-    if (company < 0 || company > 10) {
+    if (company < 0 || company > STORAGE_GROUP_MAX) {
         var error_message = $"scr_company_view passed bad company:\n{company}";
         show_error(error_message, true);
     }
@@ -460,7 +460,7 @@ function switch_view_company(new_view) {
         }
         filter_mode = false;
         text_bar = 0;
-        if (managing <= 10 && managing >= 0) {
+        if (managing >= 0 && managing <= 15) {
             if (struct_exists(company_data, "reset_squad_surface")) {
                 company_data.reset_squad_surface();
             }
@@ -473,15 +473,13 @@ function switch_view_company(new_view) {
                 instance_destroy();
             }
         }
-        if (new_view > 10) {
-            view_squad = false;
-            scr_special_view(new_view);
-        } else {
-            with (obj_ini) {
-                scr_company_order(new_view);
-            }
-            scr_company_view(new_view);
+        // Institution/HQ view codes (11-15) and line companies (1-10) are all real storage
+        // groups now; map the view code to its storage index and view it like any company.
+        var _storage = manage_to_storage(new_view);
+        with (obj_ini) {
+            scr_company_order(_storage);
         }
+        scr_company_view(_storage);
         new_company_struct();
     }
 }

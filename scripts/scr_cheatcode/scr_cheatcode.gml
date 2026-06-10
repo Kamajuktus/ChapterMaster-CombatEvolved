@@ -41,6 +41,10 @@ function scr_cheatcode(argument0) {
 
         if (cheat_code != "") {
             switch (cheat_code) {
+                case "slotbattles":
+                    global.slot_battle_mode = !global.slot_battle_mode;
+                    scr_popup("Slot Battles", $"Slot-based ground battles are now {global.slot_battle_mode ? "ENABLED" : "DISABLED"}.", "", "");
+                    break;
                 case "finishforge":
                     with (obj_controller) {
                         specialist_point_handler.forge_points = 1000000;

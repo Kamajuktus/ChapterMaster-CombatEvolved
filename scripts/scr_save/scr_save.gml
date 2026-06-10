@@ -27,6 +27,10 @@ function scr_save(save_part, save_id, autosaving = false) {
                 chapter_name: global.chapter_name,
                 sector_name: obj_ini.sector_name,
                 version: global.game_version,
+                // Storage-layout version. 2 = institutions (Apothecarium/Librarium/Reclusium/
+                // Armoury) are first-class storage groups (11-14). Saves without this are pre-
+                // refactor and are rejected on load (their heads/free specialists lived in co 0).
+                save_format: SAVE_FORMAT_CURRENT,
                 play_time: play_time,
                 game_seed: global.game_seed,
                 icon_name: global.chapter_icon.name,

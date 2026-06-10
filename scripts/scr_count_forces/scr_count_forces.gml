@@ -2,8 +2,8 @@ function scr_count_forces(_unit_location, _target_location, _is_planet, instance
     if (_is_planet) {
         var info_mahreens = 0;
         var info_vehicles = 0;
-        //For each of the companies (HQ + 10)
-        for (var company = 0; company < 11; company++) {
+        //For each of the companies (HQ + 10 line companies + 4 institutions)
+        for (var company = 0; company < STORAGE_GROUP_COUNT; company++) {
             var i = 0;
             var _unit = fetch_unit([company, i]);
             //For each unit in that company, while unit exists

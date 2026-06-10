@@ -340,6 +340,15 @@ function ChapterGameData(data = {}) constructor {
 
     move_data_to_current_scope(data);
 
+    // Plain-data form for saving; the constructor restores it via move_data_to_current_scope.
+    static serialize = function() {
+        return {
+            chapter_suspicion: chapter_suspicion,
+            faction_disp_mods: faction_disp_mods,
+            equipment_tag_mods: equipment_tag_mods,
+        };
+    };
+
     static merge_mods = function(mod_1, mod_2) {
         if (struct_exists(mod_2, "int_mod")) {
             if (struct_exists(mod_1, "int_mod")) {

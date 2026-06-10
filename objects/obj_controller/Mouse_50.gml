@@ -45,7 +45,7 @@ if ((menu == 12) && (cooldown <= 0) && (penitorium > 0)) {
         }
         penitorium = 0;
         var p = 0;
-        for (var c = 0; c < 11; c++) {
+        for (var c = 0; c < STORAGE_GROUP_COUNT; c++) {
             for (var e = 0; e < array_length(obj_ini.god[c]); e++) {
                 if (obj_ini.god[c][e] == 10) {
                     p += 1;

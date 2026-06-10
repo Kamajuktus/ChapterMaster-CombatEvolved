@@ -213,7 +213,7 @@ function Roster() constructor {
         var _roster_types = struct_get_names(selected_local_roster);
         for (var i = 0; i < array_length(_roster_types); i++) {
             var _roster_type_name = _roster_types[i];
-            var _roster_type_count = selected_local_roster[$ _roster_type_name];
+            var _roster_type_count = selected_roster[$ _roster_type_name];
 
             roster_local_string += $"{string_plural_count(_roster_type_name, _roster_type_count)}";
             roster_local_string += smart_delimeter_sign(_roster_types, i, false);
@@ -249,7 +249,7 @@ function Roster() constructor {
         var _squads = [];
         var _vehicles = [];
         var _company_present = false;
-        for (var co = 0; co <= obj_ini.companies; co++) {
+        for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
             _company_present = false;
             for (var i = 0; i < array_length(obj_ini.role[co]); i++) {
                 var _allow = false;
@@ -331,7 +331,9 @@ function Roster() constructor {
 
             var _button = new ToggleButton();
             var _col = _company_present ? CM_GREEN_COLOR : c_red;
-            var _display = co ? scr_roman_numerals()[co - 1] : "HQ";
+            // co spans 0 (HQ), 1-10 (line companies, roman) and 11-14 (institutions); use the
+            // group helper so institution indices don't index past the 10-element roman array.
+            var _display = (co >= 1 && co <= LINE_COMPANY_MAX) ? scr_roman_numerals()[co - 1] : group_display_name(co);
             _button.str1 = _display;
             _button.text_halign = fa_center;
             _button.text_color = _col;
@@ -353,6 +355,10 @@ function Roster() constructor {
     };
 
     static add_to_battle = function() {
+        // Outdated column combat is disabled; nothing to populate.
+        if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+            return;
+        }
         var meeting = false;
         if (instance_exists(obj_temp_meeting)) {
             meeting = true;
@@ -474,6 +480,10 @@ function PurgeButton(purge_image, xx, yy, purge_type) constructor {
 }
 
 function setup_battle_formations() {
+    // Outdated column combat is disabled; skip formation setup.
+    if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+        return;
+    }
     // Formation here
     var new_combat = obj_ncombat;
     obj_controller.bat_devastator_column = obj_controller.bat_deva_for[new_combat.formation_set];

@@ -173,18 +173,19 @@ function apothecary_training() {
             if (random_marine != "none") {
                 var marine_position = random_marine[1];
                 var marine_company = random_marine[0];
-                // This gets the last open slot for company 0
-                var open_slot = find_company_open_slot(0);
+                // Trained specialists join their institution (Apothecarion), not a line company.
+                var _dest_group = institution_group_for_role(novice_type);
+                var open_slot = find_company_open_slot(_dest_group);
                 if (open_slot != -1) {
-                    scr_move_unit_info(marine_company, 0, marine_position, open_slot);
-                    var unit = fetch_unit([0, open_slot]);
+                    scr_move_unit_info(marine_company, _dest_group, marine_position, open_slot);
+                    var unit = fetch_unit([_dest_group, open_slot]);
                     unit.update_role(novice_type);
                     unit.update_gear("");
                     unit.update_mobility_item("");
                     scr_alert("green", "recruitment", unit.name_role() + " begins training.", 0, 0);
                     with (obj_ini) {
                         scr_company_order(marine_company);
-                        scr_company_order(0);
+                        scr_company_order(_dest_group);
                     }
                 }
             } else {
@@ -251,18 +252,19 @@ function chaplain_training() {
                 if (random_marine != "none") {
                     var marine_position = random_marine[1];
                     var marine_company = random_marine[0];
-                    var open_slot = find_company_open_slot(0);
+                    var _dest_group = institution_group_for_role(novice_type);
+                    var open_slot = find_company_open_slot(_dest_group);
                     if (open_slot != -1) {
                         chaplain_aspirant = 1;
-                        scr_move_unit_info(marine_company, 0, marine_position, open_slot);
-                        var unit = fetch_unit([0, open_slot]);
+                        scr_move_unit_info(marine_company, _dest_group, marine_position, open_slot);
+                        var unit = fetch_unit([_dest_group, open_slot]);
                         unit.update_role(novice_type);
                         unit.update_gear("");
                         unit.update_mobility_item("");
                         scr_alert("green", "recruitment", unit.name_role() + " begins training.", 0, 0);
                         with (obj_ini) {
                             scr_company_order(marine_company);
-                            scr_company_order(0);
+                            scr_company_order(_dest_group);
                         }
                     }
                 } else {
@@ -319,10 +321,11 @@ function librarian_training() {
                 // This gets the last open slot for company 0
                 var marine_position = random_marine[1];
                 var marine_company = random_marine[0];
-                var open_slot = find_company_open_slot(0);
+                var _dest_group = institution_group_for_role(novice_type);
+                var open_slot = find_company_open_slot(_dest_group);
                 if (open_slot != -1) {
-                    scr_move_unit_info(marine_company, 0, marine_position, open_slot);
-                    var unit = fetch_unit([0, open_slot]);
+                    scr_move_unit_info(marine_company, _dest_group, marine_position, open_slot);
+                    var unit = fetch_unit([_dest_group, open_slot]);
                     unit.update_role(novice_type);
                     unit.update_powers();
                     psyker_aspirant = 1;
@@ -332,7 +335,7 @@ function librarian_training() {
                     scr_alert("green", "recruitment", unit.name_role() + " begins training.", 0, 0);
                     with (obj_ini) {
                         scr_company_order(marine_company);
-                        scr_company_order(0);
+                        scr_company_order(_dest_group);
                     }
                 }
             }
@@ -431,11 +434,12 @@ function techmarine_training() {
             if (random_marine != "none") {
                 var marine_position = random_marine[1];
                 var marine_company = random_marine[0];
-                // This gets the last open slot for company 0
-                var open_slot = find_company_open_slot(0);
+                // Trained specialists join their institution (Armoury), not a line company.
+                var _dest_group = institution_group_for_role(novice_type);
+                var open_slot = find_company_open_slot(_dest_group);
                 if (open_slot != -1) {
-                    scr_move_unit_info(marine_company, 0, marine_position, open_slot);
-                    var unit = fetch_unit([0, open_slot]);
+                    scr_move_unit_info(marine_company, _dest_group, marine_position, open_slot);
+                    var unit = fetch_unit([_dest_group, open_slot]);
                     unit.update_role(novice_type);
 
                     // Remove from ship
@@ -459,7 +463,7 @@ function techmarine_training() {
                     }
                     with (obj_ini) {
                         scr_company_order(marine_company);
-                        scr_company_order(0);
+                        scr_company_order(_dest_group);
                     }
                 }
             } else {

@@ -17,12 +17,16 @@ function scr_random_marine(role, exp_req, search_params = "none") {
         7,
         8,
         9,
-        10
+        10,
+        GROUP_APOTHECARIUM,
+        GROUP_LIBRARIUM,
+        GROUP_RECLUSIUM,
+        GROUP_ARMOURY
     ];
     if (role == SPECIALISTS_LIBRARIANS) {
         role = role_groups(SPECIALISTS_LIBRARIANS);
     }
-    for (var comp_shuffle = 0; comp_shuffle < 11; comp_shuffle++) {
+    for (var comp_shuffle = 0; comp_shuffle < STORAGE_GROUP_COUNT; comp_shuffle++) {
         // this ensures that companies are searched randomly
         var new_comp = irandom(array_length(company_list) - 1);
         company = company_list[new_comp];

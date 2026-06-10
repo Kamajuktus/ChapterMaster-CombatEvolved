@@ -27,7 +27,7 @@ function scr_add_corruption(is_fleet, modifier_type) {
                 array_push(ships, escort_num[i]);
             }
         }
-        for (var co = 0; co <= 10; co++) {
+        for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
             for (var i = 0; i < array_length(obj_ini.name[co]); i++) {
                 if (obj_ini.name[co][i] == "") {
                     continue;

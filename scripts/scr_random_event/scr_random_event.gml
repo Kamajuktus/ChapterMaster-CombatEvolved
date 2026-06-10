@@ -718,7 +718,7 @@ function scr_random_event(execute_now) {
         }
 
         if ((!psyker_intolerant) && has_chief_psyker) {
-            scr_popup("The Maw of the Warp Yawns Wide", "Chief " + string(obj_ini.role[100][17]) + " " + string(obj_ini.name[0][5]) + " reports that the barrier between the realm of man and the Immaterium feels thin and tested.", "Warp", "");
+            scr_popup("The Maw of the Warp Yawns Wide", "Chief " + string(obj_ini.role[100][17]) + " " + string(head_name("Chief " + string(obj_ini.role[100][17]))) + " reports that the barrier between the realm of man and the Immaterium feels thin and tested.", "Warp", "");
         } else if ((psyker_intolerant || !has_chief_psyker) && cm_is_psyker) {
             scr_popup("The Maw of the Warp Yawns Wide", "The barrier between the realm of man and the Immaterium feels thin and tested to you.  Dark forces are afoot.", "Warp", "");
         }

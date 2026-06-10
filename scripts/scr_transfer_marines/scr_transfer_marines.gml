@@ -121,7 +121,7 @@ function transfer_marines() {
     obj_ini.selected_company = company;
     obj_ini.temp_target_company = target_comp;
     with (obj_ini) {
-        for (var co = 0; co < 11; co++) {
+        for (var co = 0; co < STORAGE_GROUP_COUNT; co++) {
             scr_company_order(co);
             scr_vehicle_order(co);
         }

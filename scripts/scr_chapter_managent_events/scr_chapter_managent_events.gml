@@ -122,7 +122,7 @@ function tech_uprising_event() {
 }
 
 function setup_new_forge_master_popup(techs) {
-    var last_master = obj_ini.previous_forge_masters[array_length(obj_ini.previous_forge_masters) - 1];
+    var last_master = (array_length(obj_ini.previous_forge_masters) > 0) ? obj_ini.previous_forge_masters[array_length(obj_ini.previous_forge_masters) - 1] : "";
     var _pop_data = {
         techs,
         charisma_pick: techs[0],
@@ -273,13 +273,12 @@ function new_forge_master_chosen(pick) {
             text += "Most are unhappy with the decision but your word is final";
         }
         reset_popup_options();
-        if (pick.company > 0) {
-            for (var i = 1; i < 500; i++) {
-                if (obj_ini.name[0][i] == "") {
-                    break;
-                }
+        // The new Forge Master joins the Armoury institution (its head), not a line company.
+        if (pick.company != GROUP_ARMOURY) {
+            var _arm_slot = find_company_open_slot(GROUP_ARMOURY);
+            if (_arm_slot != -1) {
+                scr_move_unit_info(pick.company, GROUP_ARMOURY, pick.marine_number, _arm_slot);
             }
-            scr_move_unit_info(pick.company, 0, pick.marine_number, i);
         }
     }
 }

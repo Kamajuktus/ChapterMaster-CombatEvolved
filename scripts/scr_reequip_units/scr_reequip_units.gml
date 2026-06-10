@@ -1,11 +1,11 @@
 /// @self Asset.GMObject.obj_controller
 function set_up_equip_popup() {
-    if (!instance_exists(obj_popup)) {
+    if (instance_number(obj_popup) == 0) {
         var f = 0, god = 0, nuuum = 0;
         var o_wep1 = "", o_wep2 = "", o_armour = "", o_gear = "", o_mobi = "";
         var b_wep1 = 0, b_wep2 = 0, b_armour = 0, b_gear = 0, b_mobi = 0;
         var vih = 0, _unit;
-        var company = managing <= 10 ? managing : 10;
+        var company = manage_to_storage(managing);
         var prev_role;
         var allow = true;
 
@@ -213,10 +213,10 @@ function draw_popup_equip() {
 
     draw_set_font(fnt_40k_12);
     var comp = "";
-    if (company <= 10 && company > 0) {
+    if (company >= 1 && company <= 10) {
         comp = int_to_roman(company);
-    } else if (company > 10) {
-        comp = "HQ";
+    } else {
+        comp = group_display_name(company);
     }
 
     if (vehicle_equipment < 6) {

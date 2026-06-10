@@ -360,7 +360,7 @@ function scr_draw_management_unit(selected, yy = 0, xx = 0, draw = true, click_l
             draw_sprite(spr_loc_icon, 2, xx + 427 + 8, yy + 66);
         } else {
             if (man[selected] == "man") {
-                c = managing <= 10 ? managing : 0;
+                c = manage_to_storage(managing);
                 var _unit = display_unit[selected];
 
                 if ((ma_lid[selected] > -1) && (ma_wid[selected] == 0)) {

@@ -1,3 +1,17 @@
+// The outdated column ground combat is disabled while the slot-based battle system is active.
+// Any event that tries to start one gets an inert instance: un-freeze the world, return to the
+// map, and let the Step event remove this shell before any battle is set up or drawn.
+column_combat_disabled = (variable_global_exists("slot_battle_mode") && global.slot_battle_mode);
+if (column_combat_disabled) {
+    formation_set = 1; // harmless default in case a caller reads it before the shell is removed
+    instance_activate_all();
+    if (instance_exists(obj_controller)) {
+        obj_controller.menu = 0;
+        obj_controller.cooldown = 5;
+    }
+    exit;
+}
+
 if (instance_number(obj_ncombat) > 1) {
     instance_destroy();
 }

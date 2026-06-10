@@ -16,13 +16,14 @@ function reset_vehicle_variable_arrays(company_number, i) {
     veh_hp[company_number][i] = 100;
     veh_chaos[company_number][i] = 0;
     veh_uid[company_number][i] = -1;
+    veh_squad[company_number][i] = "";
 }
 
 /// @self Asset.GMObject.obj_ini
 function scr_vehicle_order(company_number) {
     // Once it's actually fucking working it should probably join the scr_company_order script in the Interface folder
     var vehicle_count = 0;
-    var temp_race, temp_loc, temp_name, temp_role, temp_wep1, temp_lid, temp_wid, temp_wep2, temp_wep3, temp_upgrade, temp_acc, temp_hp, temp_chaos, temp_uid;
+    var temp_race, temp_loc, temp_name, temp_role, temp_wep1, temp_lid, temp_wid, temp_wep2, temp_wep3, temp_upgrade, temp_acc, temp_hp, temp_chaos, temp_uid, temp_squad;
 
     // init arrays
     for (var i = 0; i < array_length(obj_ini.veh_role[company_number]); i++) {
@@ -40,6 +41,7 @@ function scr_vehicle_order(company_number) {
         temp_hp[company_number][i] = 100;
         temp_chaos[company_number][i] = 0;
         temp_uid[company_number][i] = -1;
+        temp_squad[company_number][i] = "";
     }
 
     // Check for vehicles
@@ -66,6 +68,7 @@ function scr_vehicle_order(company_number) {
             temp_hp[company_number][vehicle_count] = veh_hp[company_number][i];
             temp_chaos[company_number][vehicle_count] = veh_chaos[company_number][i];
             temp_uid[company_number][vehicle_count] = veh_uid[company_number][i];
+            temp_squad[company_number][vehicle_count] = veh_squad[company_number][i];
             vehicle_count++;
         }
         reset_vehicle_variable_arrays(company_number, i);
@@ -87,5 +90,6 @@ function scr_vehicle_order(company_number) {
         veh_hp[company_number][i] = temp_hp[company_number][i];
         veh_chaos[company_number][i] = temp_chaos[company_number][i];
         veh_uid[company_number][i] = temp_uid[company_number][i];
+        veh_squad[company_number][i] = temp_squad[company_number][i];
     }
 }

@@ -42,8 +42,8 @@ function mechanicus_missions_end_turn(planet) {
                 battli = 2;
             } // very oops, much necron, wow
 
-            if ((battli > 0) && (p_player[planet] > 0)) {
-                // Quene the battle
+            if ((battli > 0) && (p_player[planet] > 0) && !(variable_global_exists("slot_battle_mode") && global.slot_battle_mode)) {
+                // Quene the battle (skipped while column combat is disabled)
                 obj_turn_end.battles += 1;
                 obj_turn_end.battle[obj_turn_end.battles] = 1;
                 obj_turn_end.battle_world[obj_turn_end.battles] = planet;
@@ -377,7 +377,7 @@ function mechanicus_mars_mission_target_time_elapsed(planet) {
     com = -1;
     ide = 0;
     ship_planet = "";
-    for (com = 0; com <= 10; com++) {
+    for (com = 0; com <= STORAGE_GROUP_MAX; com++) {
         for (ide = 0; ide < array_length(obj_ini.TTRPG[com]); ide++) {
             _unit = fetch_unit([com, ide]);
             if (_unit.name() == "") {

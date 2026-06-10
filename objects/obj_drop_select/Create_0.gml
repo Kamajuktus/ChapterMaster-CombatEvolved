@@ -44,7 +44,7 @@ r_techmarines = 0;
 // Attack
 r_bikes = 0;
 
-if (!instance_exists(obj_saveload)) {
+if (action_if_number(obj_saveload, 0, 0)) {
     ship_names = "";
     max_ships = 0;
     ships_selected = 0;
@@ -135,8 +135,8 @@ if (!instance_exists(obj_saveload)) {
         formation_current = 0;
     }
 
-    fighting = array_create(11, array_create(501));
-    veh_fighting = array_create(11, array_create(501));
+    fighting = array_create(STORAGE_GROUP_COUNT, array_create(501));
+    veh_fighting = array_create(STORAGE_GROUP_COUNT, array_create(501));
 }
 camera_width = camera_get_view_width(view_camera[0]);
 camera_height = camera_get_view_height(view_camera[0]);

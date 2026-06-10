@@ -57,12 +57,12 @@ function scr_crusade() {
 
     var death_data = death_sets[$ type];
 
-    for (co = 0; co <= 10; co++) {
+    for (co = 0; co <= STORAGE_GROUP_MAX; co++) {
         clean[co] = 0;
     }
     var total_ship_id = array_concat(capital_num, frigate_num, escort_num);
 
-    for (co = 0; co <= 10; co++) {
+    for (co = 0; co <= STORAGE_GROUP_MAX; co++) {
         for (i = 0; i <= 500; i++) {
             good = 0;
             dead = false;
@@ -153,7 +153,7 @@ function scr_crusade() {
     // repeat(11){
     // i+=1;
     with (obj_ini) {
-        for (i = 0; i <= 10; i++) {
+        for (i = 0; i <= STORAGE_GROUP_MAX; i++) {
             scr_company_order(i);
         }
     }

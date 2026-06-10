@@ -8,7 +8,7 @@ function scr_check_equip(search_item, system, planet_or_ship_id, remove_item) {
 
     var man_c = 0, man_i = 0, have = 0, unit, marine_present;
 
-    for (var c = 0; c <= 10; c++) {
+    for (var c = 0; c <= STORAGE_GROUP_MAX; c++) {
         for (var i = 1; i <= 500; i++) {
             if (obj_ini.name[c][i] == "") {
                 continue;

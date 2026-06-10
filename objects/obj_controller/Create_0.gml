@@ -84,7 +84,7 @@ sound_in = 0;
 sound_to = "";
 fix_right = 0;
 text_bar = 0;
-bar_fix = false;
+bar_fix = 0;
 last_attack_form = 1;
 last_raid_form = 3;
 double_click = 0;
@@ -650,6 +650,11 @@ last_inquisitor_inspection = 0; // Duhuhu
 // chaos_turn=100+((floor(random(10))+1)*choose(-1,1));
 // ** Sets when chaos will arrive **
 chaos_turn = 2;
+// When true, contested planets with a player garrison resolve via the new slot-based
+// ground battle system (scr_battle_resolve) at end of turn, and the AI no longer launches
+// the old interactive line-combat for planet invasions. Toggle with the "slotbattles" cheat.
+global.slot_battle_mode = true;
+
 // ** Sets fleets**
 chaos_fleets = 0;
 tau_fleets = 0;
@@ -974,17 +979,17 @@ faction_status[eFACTION.GENESTEALER] = "War";
 faction_status[eFACTION.NECRONS] = "War";
 // ** Sets faction gender for names **
 faction_gender = array_create(14, 1);
-faction_gender[eFACTION.ELDAR] = set_gender();
-faction_gender[eFACTION.TAU] = set_gender();
+faction_gender[6] = set_gender();
+faction_gender[8] = set_gender();
 
 //TODO this syntax for choosing gendered naes is kinda ass to read
 faction_leader[eFACTION.INQUISITION] = _name_gen.GenerateFromSet($"imperial_{string_gender(faction_gender[eFACTION.INQUISITION])}");
 
-faction_gender[eFACTION.CHAOS] = set_gender();
-if (faction_gender[eFACTION.CHAOS] == eGENDER.FEMALE) {
+faction_gender[10] = set_gender();
+if (faction_gender[10] == eGENDER.FEMALE) {
     faction_leader[eFACTION.CHAOS] = choose("1", "1", "1", "2");
 }
-if (faction_gender[eFACTION.CHAOS] == eGENDER.MALE) {
+if (faction_gender[10] == eGENDER.MALE) {
     faction_leader[eFACTION.CHAOS] = choose("1", "2", "2", "2");
 }
 if (faction_leader[eFACTION.CHAOS] == "1") {
@@ -1418,7 +1423,11 @@ LOGGER.info("Game start welcoming message");
 var njm = 34, com = 0, vih = 0, word = "", masta = 0, forga = 0, chapla = 0, apa = 0, liba = 0, techa = 0, libra = 0, coda = 0, lexa = 0, apotha = 0, old_dudes = 0;
 
 var honoh = 0, termi = 0, veter = 0, capt = 0, chap = 0, apoth = 0, stand = 0, dread = 0, champ = 0, tact = 0, assa = 0, deva = 0, rhino = 0, speeder = 0, raider = 0, standard = 0, bike = 0, scou = 0, whirl = 0, pred = 0, lib = 0, serg = 0, vet_serg = 0;
-for (var mm = 0; mm <= 100; mm++) {
+// Command staff = HQ (company 0) plus the four institutions (their heads + free specialists).
+var _staff_groups = [0, GROUP_APOTHECARIUM, GROUP_LIBRARIUM, GROUP_RECLUSIUM, GROUP_ARMOURY];
+for (var _sg = 0; _sg < array_length(_staff_groups); _sg++) {
+    com = _staff_groups[_sg];
+    for (var mm = 0; mm <= 100; mm++) {
     if (obj_ini.role[com][mm] == obj_ini.role[100][eROLE.CHAPTERMASTER]) {
         masta = 1;
     }
@@ -1455,25 +1464,26 @@ for (var mm = 0; mm <= 100; mm++) {
     if (obj_ini.role[com][mm] == obj_ini.role[100][eROLE.HONOURGUARD]) {
         honoh += 1;
     }
+    }
 }
 
 temp[njm] = "Command staff made of";
 
 // Command staff names start at index 1 rather than 0 to align with the chapter company structure
 if (masta == 1) {
-    temp[njm] += $", your majesty Chapter Master {obj_ini.name[com][0]}";
+    temp[njm] += $", your majesty Chapter Master {obj_ini.name[0][0]}";
 }
 if (forga == 1) {
-    temp[njm] += $", Forge Master {obj_ini.name[com][1]}";
+    temp[njm] += ", Forge Master " + head_name("Forge Master");
 }
 if (chapla == 1) {
-    temp[njm] += $", Master of Sanctity {obj_ini.name[com][2]}";
+    temp[njm] += ", Master of Sanctity " + head_name("Master of Sanctity");
 }
 if (apa == 1) {
-    temp[njm] += $", Master of the Apothecarion {obj_ini.name[com][3]}";
+    temp[njm] += ", Master of the Apothecarion " + head_name("Master of the Apothecarion");
 }
 if (liba == 1) {
-    temp[njm] += $", and Chief Librarian {obj_ini.name[com][4]}.  ";
+    temp[njm] += ", and Chief Librarian " + head_name("Chief " + string(obj_ini.role[100][eROLE.LIBRARIAN])) + ".  ";
 }
 
 vih = string_pos(",", temp[njm]);
@@ -1506,6 +1516,9 @@ if (honoh > 0) {
     temp[njm] += $"\n\nHonour Guard, having the {honoh} most veteran {string_plural("marine", honoh)} of your chapter serving in it.";
 }
 
+// The command-staff loop above iterates several storage groups and leaves `com` at the last
+// one; the per-company census below uses `com++` (1..10), so it must start from 0.
+com = 0;
 for (var company = 0; company < 10; company++) {
     njm++;
     com++;
@@ -1852,7 +1865,7 @@ remov = string_length(string(temp[65]) + string(temp[66]) + string(temp[67]) + s
 
 instance_create(0, 0, obj_tooltip);
 
-alarm_set(0, 2);
+action_set_alarm(2, 0);
 
 //ensure fleet tab isup to date at gae start
 location_viewer.update_fleet_table();

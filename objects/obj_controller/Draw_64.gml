@@ -14,6 +14,11 @@ if (instance_exists(obj_ncombat)) {
 if (instance_exists(obj_fleet)) {
     exit;
 }
+// The slot battle view is a full-screen overlay that draws its own UI; suppress the main game
+// UI underneath it so clicks (e.g. its Close button) can't fall through to the menu buttons.
+if (instance_exists(obj_battle_view)) {
+    exit;
+}
 if (global.load >= 0) {
     exit;
 }
@@ -32,8 +37,6 @@ if (is_test_map == true) {
 try {
     if (menu == eMENU.ARMAMENTARIUM) {
         armamentarium.draw();
-    } else if (menu >= eMENU.SETTINGS && menu <= eMENU.FORMATIONS_SETTINGS){
-        draw_sprite(spr_settings_bg, 0, 0, 0);
     }
 } catch (_exception) {
     ERROR_HANDLER.handle_exception(_exception);
@@ -267,8 +270,6 @@ try {
         }
     } else if (menu == eMENU.LIBRARIUM) {
         scr_librarium_gui();
-    } else if (menu >= eMENU.SETTINGS && menu <= eMENU.FORMATIONS_SETTINGS) {
-        scr_ui_settings();
     }
 } catch (_exception) {
     ERROR_HANDLER.handle_exception(_exception);

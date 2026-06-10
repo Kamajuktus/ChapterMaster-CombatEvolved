@@ -580,7 +580,7 @@ function collect_role_group(group = SPECIALISTS_STANDARD, location = "", opposit
     search_conditions.opposite = opposite;
 
     var _conditions = new SearchConditions(search_conditions);
-    for (var com = 0; com <= obj_ini.companies; com++) {
+    for (var com = 0; com <= STORAGE_GROUP_MAX; com++) {
         if (_max_count > 0) {
             if (array_length(_units) >= _max_count) {
                 break;
@@ -847,7 +847,7 @@ function stat_valuator(search_params, _unit) {
 //TOODO probably just roll this into other checks
 function collect_by_religeon(religion, sub_cult = "", location = "") {
     var _units = [], _unit, count = 0, _add = false;
-    for (var com = 0; com <= obj_ini.companies; com++) {
+    for (var com = 0; com <= STORAGE_GROUP_MAX; com++) {
         for (var i = 1; i < array_length(obj_ini.TTRPG[com]); i++) {
             _add = false;
             _unit = obj_ini.TTRPG[com][i];

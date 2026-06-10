@@ -541,7 +541,7 @@ function ArtifactStruct(Index) constructor {
                 var _bearer_found = false;
                 var _unit;
                 if (_b_type == "weapon") {
-                    for (var co = 0; co < obj_ini.companies; co++) {
+                    for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
                         for (var i = 0; i < array_length(obj_ini.role[co]); i++) {
                             _unit = fetch_unit([co, i]);
                             if (_unit.weapon_one(true) == index) {
@@ -572,7 +572,7 @@ function ArtifactStruct(Index) constructor {
                         _find_function = "mobility_item";
                     }
                     if (_find_function != "") {
-                        for (var co = 0; co < obj_ini.companies; co++) {
+                        for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
                             for (var i = 0; i < array_length(obj_ini.role[co]); i++) {
                                 var _unit = fetch_unit([co, i]);
                                 if (_unit[$ _find_function](true) == index) {

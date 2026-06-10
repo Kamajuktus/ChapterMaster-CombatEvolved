@@ -1,3 +1,7 @@
+if (column_combat_disabled) {
+    exit;
+}
+
 if (global.cheat_debug == 1) {
     for (var i = 0; i < 30; i++) {
         if (_message[i] != "") {

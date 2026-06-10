@@ -461,7 +461,8 @@ function meet_system_governors(system) {
 }
 
 function scr_planet_image_numbers(p_type) {
-    var image_map = [
+    var image = 0;
+    image_map = [
         "",
         "Lava",
         "Lava",
@@ -486,7 +487,7 @@ function scr_planet_image_numbers(p_type) {
             return i;
         }
     }
-    return 0;
+    return image;
 }
 
 //function scr_get_player_fleets() {

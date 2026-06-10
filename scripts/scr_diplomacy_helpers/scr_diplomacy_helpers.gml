@@ -277,7 +277,7 @@ function scr_emmisary_diplomacy_routes() {
             //grab a random librarian
             var lib = scr_random_marine(SPECIALISTS_LIBRARIANS, 0);
             if (lib != "none") {
-                var chapter_master = obj_ini.TTRPG[0][1];
+                var chapter_master = obj_ini.TTRPG[0][0];
                 var dead_lib = obj_ini.TTRPG[lib[0]][lib[1]];
                 pop_up = instance_create(0, 0, obj_popup);
                 pop_up.title = "Skull for the Skull Throne";
@@ -298,7 +298,7 @@ function scr_emmisary_diplomacy_routes() {
             diplomacy_pathway = "sacrifice_champ";
             var champ = scr_random_marine(obj_ini.role[100][7], 0);
             if (champ != "none") {
-                var chapter_master = obj_ini.TTRPG[0][1];
+                var chapter_master = obj_ini.TTRPG[0][0];
                 chapter_master.add_trait("blood_for_blood");
                 chapter_master.edit_corruption(20);
                 var dead_champ = obj_ini.TTRPG[champ[0]][champ[1]];
@@ -326,7 +326,7 @@ function scr_emmisary_diplomacy_routes() {
             for (var i = 0; i < array_length(_squad_ids); i++) {
                 kill_squad = fetch_squad(_squad_ids[i]);
                 if (kill_squad.type == "tactical_squad" && array_length(kill_squad.members) > 4) {
-                    var chapter_master = fetch_unit([0, 1]);
+                    var chapter_master = fetch_unit([0, 0]);
                     chapter_master.add_trait("blood_for_blood");
                     chapter_master.edit_corruption(20);
                     kill_squad.kill_members();

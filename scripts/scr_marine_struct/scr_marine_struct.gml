@@ -1810,6 +1810,11 @@ function TTRPG_stats(faction, comp, mar, class = "marine", other_spawn_data = {}
     };
 
     static company_roman = function() {
+        // Roman numerals only exist for the ten line companies; HQ (0) and the institutions
+        // (11-14) have no numeral, so fall back to the numeric index to avoid an out-of-range read.
+        if (company < 1 || company > LINE_COMPANY_MAX) {
+            return string(company);
+        }
         return $"{scr_roman_numerals()[company - 1]}";
     };
 
@@ -2302,7 +2307,7 @@ function fetch_unit(unit) {
 }
 
 function fetch_unit_uid(uuid) {
-    for (var i = 0; i < obj_ini.companies; i++) {
+    for (var i = 0; i <= STORAGE_GROUP_MAX; i++) {
         var _comp_length = array_length(obj_ini.TTRPG[i]);
         for (var s = 0; s < _comp_length; s++) {
             var _unit = fetch_unit([i, s]);

@@ -53,7 +53,7 @@ function scr_role_count(target_role, search_location = "", return_type = "count"
     }
 
     if (coom < 0) {
-        for (var com = 0; com <= obj_ini.companies; com++) {
+        for (var com = 0; com <= STORAGE_GROUP_MAX; com++) {
             for (var i = 0; i < array_length(obj_ini.TTRPG[com]); i++) {
                 match = false;
                 unit = fetch_unit([com, i]);

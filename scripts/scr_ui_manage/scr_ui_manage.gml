@@ -49,6 +49,16 @@ function load_marines_into_ship(system, ship, units, reload = false) {
                 }
             }
 
+            // Squads in direct combat can't board ships from the management screen; they must
+            // use the battle screen's per-squad escape. Non-engaged squads release their
+            // garrison duty so load_marine (which refuses on-assignment units) will proceed.
+            if (_is_marine && is_struct(_unit) && _unit.squad != "none") {
+                if (squad_is_engaged(_unit.squad)) {
+                    continue; // skip loading this engaged marine
+                }
+                free_squad_from_garrison(_unit.squad);
+            }
+
             if (_is_marine) {
                 var _unit_size = man_size;
             } else {
@@ -173,7 +183,7 @@ function reset_manage_unit_constants(unit) {
         unit_manage_constants.mobi_string = new ReactiveString(unit.equipments_qual_string("mobi", true), 0, 0, _data);
 
         var _data = {
-            tooltip: $"==First Weapon==\n{is_struct(_equip_data.weapon_one_data) ? _equip_data.weapon_one_data.item_tooltip_desc_gen() : ""}",
+            tooltip: $"==First Weapon==\n{is_struct(_equip_data.weapon_one_data) ? _equip_data.weapon_one_data.item_tooltip_desc_gen() : ""}\n{weapon_sweetspot_text(unit.weapon_one())}\n{weapon_range_reduction_text(unit.weapon_one())}",
             colour: quality_color(unit.weapon_one_quality),
             max_width: 187,
         };
@@ -182,7 +192,7 @@ function reset_manage_unit_constants(unit) {
 
         //mobility
         var _data = {
-            tooltip: $"==Second Weapon==\n{is_struct(_equip_data.weapon_two_data) ? _equip_data.weapon_two_data.item_tooltip_desc_gen() : ""}",
+            tooltip: $"==Second Weapon==\n{is_struct(_equip_data.weapon_two_data) ? _equip_data.weapon_two_data.item_tooltip_desc_gen() : ""}\n{weapon_sweetspot_text(unit.weapon_two())}\n{weapon_range_reduction_text(unit.weapon_two())}",
             colour: quality_color(unit.weapon_two_quality),
             max_width: 187,
         };
@@ -422,10 +432,12 @@ function reset_manage_unit_constants(unit) {
         if (unit.company <= 0) {
             _role_name = $"{unit.squad_role()}";
         } else if (unit.IsSpecialist()) {
-            _comp_string = $"{unit.company_roman()} Company";
+            // group_display_name handles line companies ("III Company") and institutions
+            // ("Apothecarion"), unlike company_roman() which indexes a 10-element roman array.
+            _comp_string = group_display_name(unit.company);
             _role_name = $"{unit.role()}";
         } else {
-            _comp_string = $"{unit.company_roman()} Company";
+            _comp_string = group_display_name(unit.company);
             _role_name = $"{unit.squad_role()}";
         }
 
@@ -499,6 +511,10 @@ function company_specific_management() {
         _allow_shorts = !_text_input.allow_input;
     } else {
         _allow_shorts = true;
+    }
+    // Typing into the squad name field must also suppress letter shortcuts
+    if (management_buttons.squad_namer.allow_input) {
+        _allow_shorts = false;
     }
     if (allow_shortcuts) {
         allow_shortcuts = _allow_shorts;
@@ -660,11 +676,14 @@ function draw_sprite_and_unit_equip_data() {
             if (view_squad && company_data.has_squads) {
                 if (company_data.current_squad != -1) {
                     var cur_squad = company_data.grab_current_squad();
-                    var sgt_possible = cur_squad.type != "command_squad" && !selected_unit.IsSpecialist(SPECIALISTS_SQUAD_LEADERS);
-                    if (selected_unit != cur_squad.squad_leader) {
-                        if (point_and_click(draw_unit_buttons([xx + 200 + 50, yy + 329], "Make Sgt", [1, 1], #50a076,,, sgt_possible ? 1 : 0.5)) && sgt_possible) {
-                            cur_squad.change_sgt(selected_unit);
+                    if (is_struct(cur_squad)) {
+                        var sgt_possible = cur_squad.type != "command_squad" && !selected_unit.IsSpecialist(SPECIALISTS_SQUAD_LEADERS);
+                        if (selected_unit != cur_squad.squad_leader) {
+                            if (point_and_click(draw_unit_buttons([xx + 200 + 50, yy + 329], "Make Sgt", [1, 1], #50a076,,, sgt_possible ? 1 : 0.5)) && sgt_possible) {
+                                cur_squad.change_sgt(selected_unit);
+                            }
                         }
+                        // (Squad reassignment now lives in the "Move Squad" picker within the squad view.)
                     }
                 }
             }
@@ -756,6 +775,25 @@ function draw_sprite_and_unit_equip_data() {
             unit_manage_constants.ranged_attack.update({x1: x_left - 6, y1: yy + 135});
 
             unit_manage_constants.ranged_attack.draw();
+
+            // Range-pull contribution: how much this marine shifts the engagement toward melee
+            // each turn. Sits directly below the attack stats on the left of the sprite.
+            var _range_red = marine_distance_reduction(selected_unit);
+            var _range_red_str;
+            if (_range_red > 0) {
+                _range_red_str = $"Range pull: +{string_format(_range_red, 1, 3)}";
+            } else if (_range_red < 0) {
+                _range_red_str = $"Range pull: {string_format(_range_red, 1, 3)}";
+            } else {
+                _range_red_str = "Range pull: 0.000";
+            }
+            draw_set_font(fnt_40k_14);
+            draw_set_halign(fa_left);
+            draw_set_color(line_color);
+            draw_text(x_left - 6, yy + 159, _range_red_str);
+            if (scr_hit(x_left - 6, yy + 159, x_left - 6 + string_width(_range_red_str), yy + 159 + 18)) {
+                tooltip_draw("How much this marine pulls the engagement toward melee each turn.#Positive closes the gap (melee gear, jump packs, banners); negative opens the range (heavy & sniper weapons).");
+            }
 
             unit_manage_constants.melee_burden.update({x1: x_left + 84, y1: yy + 111});
 
@@ -1128,10 +1166,7 @@ function scr_ui_manage() {
 
                 with (obj_controller) {
                     if (view_squad && !instance_exists(obj_popup)) {
-                        if (managing > 10) {
-                            view_squad = false;
-                            unit_profile = false;
-                        } else if (company_data.has_squads) {
+                        if (company_data.has_squads) {
                             unit_profile = true;
                             try {
                                 company_data.draw_squad_view();
@@ -1492,12 +1527,6 @@ function draw_manage_selection_buttons(xx, yy) {
         button.draw(false);
     }
 
-    var top_x = actions_block.x1 + 26;
-    var top_y = actions_block.y1 + 70;
-
-    var inf_type_x = top_x;
-    var inf_type_y = top_y;
-
     if (sel_uni[1] != "") {
         // How much space the selected unit takes
         draw_set_font(fnt_40k_30b);
@@ -1511,6 +1540,8 @@ function draw_manage_selection_buttons(xx, yy) {
 
         // Select all units button
         // button reset code
+        var top_x = actions_block.x1 + 26;
+        var top_y = actions_block.y1 + 70;
 
         button.set_width = false;
         button.w = 0;
@@ -1549,8 +1580,8 @@ function draw_manage_selection_buttons(xx, yy) {
             sel_all = "man";
         }
 
-        inf_type_x = button.x1 + button.w + button.v_gap;
-        inf_type_y = button.y1;
+        var inf_type_x = button.x1 + button.w + button.v_gap;
+        var inf_type_y = button.y1;
 
         // Select infantry type buttons
         for (var i = 1; i <= 8; i++) {

@@ -15,6 +15,7 @@ p_data = new PlanetData(0, target);
 has_player_forces = array_sum(target.p_player) > 0;
 
 manage_units_button = new UnitButtonObject({x1: 115, y1: 200, style: "pixel", label: "Manage Units"});
+recall_idle_button = new UnitButtonObject({x1: 115, y1: 240, style: "pixel", label: "Recall Idle Squads", tooltip: "Return squads from planets with no enemies present to their ships."});
 
 //if (global.cheat_debug){
 debug_button = new UnitButtonObject({x1: 36, y1: 185, style: "pixel", label: "Debug"});

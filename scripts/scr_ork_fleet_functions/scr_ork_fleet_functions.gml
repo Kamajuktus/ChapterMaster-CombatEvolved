@@ -100,6 +100,17 @@ function ork_fleet_arrive_target() {
         if (_allow_landing) {
             for (var i = 0; i < planets; i++) {
                 var _planet = _planets[i];
+                // Reinforce an in-progress ground battle: disassemble the fleet into enemy slots
+                // (scaled by ship size) rather than bumping the abstract force count.
+                var _battle_pdata = new PlanetData(_planet, self);
+                if (_battle_pdata.has_battle() && !fleet_has_cargo("ork_warboss", _ork_fleet)) {
+                    fleet_disembark_to_battle(_ork_fleet, _battle_pdata, eFACTION.ORK);
+                    with (_ork_fleet) {
+                        instance_destroy();
+                    }
+                    aler = 1;
+                    break;
+                }
                 if ((p_guardsmen[_planet] + p_pdf[_planet] + p_player[_planet] + p_traitors[_planet] + p_tau[_planet] > 0) || ((p_owner[_planet] != 7) && (p_orks[_planet] <= 0))) {
                     if ((p_type[_planet] != "Dead") && (p_orks[_planet] < 4) && (i <= planets)) {
                         p_orks[_planet] += max(2, floor(_ork_fleet.image_index * 0.8));

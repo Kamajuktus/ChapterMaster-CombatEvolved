@@ -1,3 +1,118 @@
+enum eROLE {
+    NONE = 0,
+    CHAPTERMASTER = 1,
+    HONOURGUARD = 2,
+    VETERAN = 3,
+    TERMINATOR = 4,
+    CAPTAIN = 5,
+    DREADNOUGHT = 6,
+    CHAMPION = 7,
+    TACTICAL = 8,
+    DEVASTATOR = 9,
+    ASSAULT = 10,
+    ANCIENT = 11,
+    SCOUT = 12,
+    CHAPLAIN = 14,
+    APOTHECARY = 15,
+    TECHMARINE = 16,
+    LIBRARIAN = 17,
+    SERGEANT = 18,
+    VETERANSERGEANT = 19,
+    LANDRAIDER = 50,
+    RHINO = 51,
+    PREDATOR = 52,
+    LANDSPEEDER = 53,
+    WHIRLWIND = 54,
+}
+
+// --- Organisational storage groups -----------------------------------------------------
+// Marines live in obj_ini.TTRPG[group][marine_number]. Groups 0..10 are HQ (0) + the ten
+// line companies (1..10). Groups 11..14 are the four chapter institutions, each a real
+// "home" holding its master + free specialists that belong to no line company.
+#macro GROUP_APOTHECARIUM 11
+#macro GROUP_LIBRARIUM 12
+#macro GROUP_RECLUSIUM 13
+#macro GROUP_ARMOURY 14
+#macro STORAGE_GROUP_MAX 14    // highest valid storage group index (inclusive)
+#macro STORAGE_GROUP_COUNT 15  // number of storage groups (0..14)
+#macro LINE_COMPANY_MAX 10     // highest line-company index
+
+// Save-layout version. Bumped to 2 when institutions became first-class storage groups; saves
+// without a matching save_format are pre-refactor and incompatible.
+#macro SAVE_FORMAT_CURRENT 2
+
+// Maps a chapter-management view code (`managing`) to its storage group index. View codes keep
+// their historical numbering (11 HQ, 12 Apothecarion, 13 Librarium, 14 Reclusium, 15
+// Armamentarium); 1..10 are line companies and pass through unchanged.
+function manage_to_storage(_managing) {
+    switch (_managing) {
+        case 11: return 0;                  // Headquarters -> company 0
+        case 12: return GROUP_APOTHECARIUM;
+        case 13: return GROUP_LIBRARIUM;
+        case 14: return GROUP_RECLUSIUM;
+        case 15: return GROUP_ARMOURY;
+        default: return _managing;          // 0..10 line companies (and any literal storage idx)
+    }
+}
+
+// The institution storage group a specialist role belongs to, or -1 if the role is not a free
+// specialist (line troops, command roles, dreadnoughts, chapter master, honour guard, etc.).
+// Explicit role-name matching avoids the chapter-specific cross-mappings in is_specialist().
+function institution_group_for_role(_role) {
+    var _r = (instance_exists(obj_creation) ? obj_creation.role[100] : obj_ini.role[100]);
+    if (_role == _r[eROLE.APOTHECARY] || _role == "Master of the Apothecarion" || _role == $"{_r[eROLE.APOTHECARY]} Aspirant") {
+        return GROUP_APOTHECARIUM;
+    }
+    if (_role == _r[eROLE.LIBRARIAN] || _role == "Codiciery" || _role == "Lexicanum" || _role == $"Chief {_r[eROLE.LIBRARIAN]}" || _role == $"{_r[eROLE.LIBRARIAN]} Aspirant") {
+        return GROUP_LIBRARIUM;
+    }
+    if (_role == _r[eROLE.CHAPLAIN] || _role == "Master of Sanctity" || _role == $"{_r[eROLE.CHAPLAIN]} Aspirant") {
+        return GROUP_RECLUSIUM;
+    }
+    if (_role == _r[eROLE.TECHMARINE] || _role == "Forge Master" || _role == "Techpriest" || _role == $"{_r[eROLE.TECHMARINE]} Aspirant") {
+        return GROUP_ARMOURY;
+    }
+    return -1;
+}
+
+// Player-facing name for a storage group index (HQ / line company / institution).
+function group_display_name(_idx) {
+    switch (_idx) {
+        case 0: return "HQ";
+        case GROUP_APOTHECARIUM: return "Apothecarion";
+        case GROUP_LIBRARIUM: return "Librarium";
+        case GROUP_RECLUSIUM: return "Reclusium";
+        case GROUP_ARMOURY: return "Armoury";
+        default:
+            if (_idx >= 1 && _idx <= LINE_COMPANY_MAX) {
+                var _roman = scr_roman_numerals();
+                return $"{_roman[_idx - 1]} Company";
+            }
+            return "Unaffiliated";
+    }
+}
+
+// Finds the living unit holding an exact (head) role anywhere in the chapter, index-agnostic.
+// Returns the marine struct or "none". Used in place of hardcoded company-0 head slots.
+function find_head(_role_name) {
+    for (var _g = 0; _g <= STORAGE_GROUP_MAX; _g++) {
+        var _comp = obj_ini.TTRPG[_g];
+        var _len = array_length(_comp);
+        for (var _i = 0; _i < _len; _i++) {
+            var _u = _comp[_i];
+            if (is_struct(_u) && _u.name() != "" && _u.role() == _role_name) {
+                return _u;
+            }
+        }
+    }
+    return "none";
+}
+
+// Convenience: the name of the unit holding a head role, or "" if the post is vacant.
+function head_name(_role_name) {
+    var _h = find_head(_role_name);
+    return (_h == "none") ? "" : _h.name();
+}
 
 enum ePROGENITOR {
     NONE,
@@ -1102,7 +1217,7 @@ function scr_initialize_custom() {
         tenth -= 10;
         dreadnought += 1;
     }
-    if ((obj_creation.squad_distribution < 2) && scr_has_disadv("Obliterated")) {
+    if ((obj_creation.equal_specialists < 2) && scr_has_disadv("Obliterated")) {
         techmarines -= 7;
         epistolary -= 2;
         codiciery -= 1;
@@ -1659,24 +1774,7 @@ function scr_initialize_custom() {
     #endregion
 
     #region Squad Loadouts
-    switch (obj_creation.squad_distribution) {
-        case 1: // equal specialists only
-            obj_ini.chapter_squad_arrangement = json_to_gamemaker(
-                working_directory + $"main\\squads\\equal_specialists.json", json_parse);
-            break;
-        case 2: // equal scouts only
-            obj_ini.chapter_squad_arrangement = json_to_gamemaker(
-                working_directory + $"main\\squads\\equal_scouts.json", json_parse);
-            break;
-        case 3: // equal specialists and equal scouts
-            obj_ini.chapter_squad_arrangement = json_to_gamemaker(
-                working_directory + $"main\\squads\\equal_spescout.json", json_parse);
-            break;
-        default: // 0 = standard
-            obj_ini.chapter_squad_arrangement = json_to_gamemaker(
-                working_directory + $"main\\squads\\company_squad_builds.json", json_parse);
-            break;
-    }
+    obj_ini.chapter_squad_arrangement = json_to_gamemaker(working_directory + $"main\\squads\\company_squad_builds.json", json_parse);
 
     var _squad_name = "Squad";
     if (obj_creation.custom != eCHAPTER_TYPE.PREMADE) {
@@ -2002,7 +2100,7 @@ function scr_initialize_custom() {
     //loads up marine traits potential modding potential;
     // initialize_marine_traits();
     #region Chapter HQ
-    for (var c = 0; c < 11; c++) {
+    for (var c = 0; c < STORAGE_GROUP_COUNT; c++) {
         for (var i = 0; i < 501; i++) {
             race[c][i] = 1;
             name[c][i] = "";
@@ -2067,9 +2165,14 @@ function scr_initialize_custom() {
     k += 1;
     commands = 1;
 
-    // Forge Master
-    name[company][1] = obj_creation.fmaster;
-    var _forge_master = add_unit_to_company("marine", company, 1, "Forge Master", eROLE.TECHMARINE, "Infernus Pistol", "Omnissian Axe", "default", "Servo-harness", _hq_armour);
+    // Per-institution storage slot counters (slot 0 is the institution's master/head).
+    var _armoury_slot = 0, _reclusium_slot = 0, _apoth_slot = 0, _libr_slot = 0;
+    // HQ (company 0) slot counter: Chapter Master holds slot 0, Honour Guard follow contiguously.
+    var _hq_slot = 0;
+
+    // Forge Master (heads the Armoury)
+    name[GROUP_ARMOURY][0] = obj_creation.fmaster;
+    var _forge_master = add_unit_to_company("marine", GROUP_ARMOURY, 0, "Forge Master", eROLE.TECHMARINE, "Infernus Pistol", "Omnissian Axe", "default", "Servo-harness", _hq_armour);
     if (_forge_master.technology < 40) {
         _forge_master.technology = 40;
     }
@@ -2088,10 +2191,10 @@ function scr_initialize_custom() {
     k += 1;
     commands += 1;
 
-    // Master of Sanctity (Chaplain)
+    // Master of Sanctity (heads the Reclusium)
     if (chaplains > 0) {
-        name[company][2] = high_chaplain_name;
-        var _hchap = add_unit_to_company("marine", company, 2, "Master of Sanctity", eROLE.CHAPLAIN, "default", "Plasma Pistol", "default", "default", _hq_armour);
+        name[GROUP_RECLUSIUM][0] = high_chaplain_name;
+        var _hchap = add_unit_to_company("marine", GROUP_RECLUSIUM, 0, "Master of Sanctity", eROLE.CHAPLAIN, "default", "Plasma Pistol", "default", "default", _hq_armour);
         _hchap.edit_corruption(-100);
         if (_hchap.piety < 45) {
             _hchap.piety = 45;
@@ -2101,17 +2204,17 @@ function scr_initialize_custom() {
         commands += 1;
     }
 
-    // Maser of the Apothecarion (Apothecary)
-    name[company][3] = obj_creation.hapothecary;
-    var _hapoth = add_unit_to_company("marine", company, 3, "Master of the Apothecarion", eROLE.APOTHECARY, "default", "Plasma Pistol", "default", "default", _hq_armour);
+    // Master of the Apothecarion (heads the Apothecarion)
+    name[GROUP_APOTHECARIUM][0] = obj_creation.hapothecary;
+    var _hapoth = add_unit_to_company("marine", GROUP_APOTHECARIUM, 0, "Master of the Apothecarion", eROLE.APOTHECARY, "default", "Plasma Pistol", "default", "default", _hq_armour);
     _hapoth.edit_corruption(0);
     k += 1;
     commands += 1;
 
-    // Chief Librarian
+    // Chief Librarian (heads the Librarium)
     if (!scr_has_disadv("Psyker Intolerant")) {
-        name[company][4] = obj_creation.clibrarian;
-        var _clibrarian = add_unit_to_company("marine", company, 4, string("Chief {0}", roles.librarian), eROLE.LIBRARIAN, "default", "Plasma Pistol", "default", "default", _hq_armour);
+        name[GROUP_LIBRARIUM][0] = obj_creation.clibrarian;
+        var _clibrarian = add_unit_to_company("marine", GROUP_LIBRARIUM, 0, string("Chief {0}", roles.librarian), eROLE.LIBRARIAN, "default", "Plasma Pistol", "default", "default", _hq_armour);
         _clibrarian.edit_corruption(0);
         _clibrarian.psionic = choose(11, 12);
         _clibrarian.update_powers();
@@ -2121,27 +2224,30 @@ function scr_initialize_custom() {
     }
     man_size = k;
 
-    // Techmarines in the armoury
+    // Free Techmarines in the Armoury (not attached to any line company)
     repeat (techmarines) {
         k += 1;
         commands += 1;
         man_size += 1;
-        add_unit_to_company("marine", company, k, roles.techmarine, eROLE.TECHMARINE, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _armoury_slot += 1;
+        add_unit_to_company("marine", GROUP_ARMOURY, _armoury_slot, roles.techmarine, eROLE.TECHMARINE, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
 
-    // Librarians in the librarium
+    // Free Librarians in the Librarium
     repeat (epistolary) {
         k += 1;
         commands += 1;
         man_size += 1;
-        var _epi = add_unit_to_company("marine", company, k, roles.librarian, eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _libr_slot += 1;
+        var _epi = add_unit_to_company("marine", GROUP_LIBRARIUM, _libr_slot, roles.librarian, eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
     // Codiciery
     repeat (codiciery) {
         k += 1;
         commands += 1;
         man_size += 1;
-        var _codi = add_unit_to_company("marine", company, k, "Codiciery", eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _libr_slot += 1;
+        var _codi = add_unit_to_company("marine", GROUP_LIBRARIUM, _libr_slot, "Codiciery", eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
 
     // Lexicanum
@@ -2149,23 +2255,26 @@ function scr_initialize_custom() {
         k += 1;
         commands += 1;
         man_size += 1;
-        var _lexi = add_unit_to_company("marine", company, k, "Lexicanum", eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _libr_slot += 1;
+        var _lexi = add_unit_to_company("marine", GROUP_LIBRARIUM, _libr_slot, "Lexicanum", eROLE.LIBRARIAN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
 
-    // Apothecaries in Apothecarion
+    // Free Apothecaries in the Apothecarion
     repeat (apothecary) {
         k += 1;
         commands += 1;
         man_size += 1;
-        add_unit_to_company("marine", company, k, roles.apothecary, eROLE.APOTHECARY, "Chainsword", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _apoth_slot += 1;
+        add_unit_to_company("marine", GROUP_APOTHECARIUM, _apoth_slot, roles.apothecary, eROLE.APOTHECARY, "Chainsword", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
 
-    // Chaplains in Reclusium
+    // Free Chaplains in the Reclusium
     repeat (chaplains) {
         k += 1;
         commands += 1;
         man_size += 1;
-        add_unit_to_company("marine", company, k, roles.chaplain, eROLE.CHAPLAIN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
+        _reclusium_slot += 1;
+        add_unit_to_company("marine", GROUP_RECLUSIUM, _reclusium_slot, roles.chaplain, eROLE.CHAPLAIN, "default", choose_weighted(global.weapon_list_weighted_ranged_pistols));
     }
 
     // Honour Guard
@@ -2183,7 +2292,8 @@ function scr_initialize_custom() {
         k += 1;
         commands += 1;
         man_size += 1;
-        add_unit_to_company("marine", company, k, roles.honour_guard, eROLE.HONOURGUARD);
+        _hq_slot += 1;
+        add_unit_to_company("marine", company, _hq_slot, roles.honour_guard, eROLE.HONOURGUARD);
     }
 
     specials = k;
@@ -2319,7 +2429,7 @@ function scr_initialize_custom() {
         }
     }
 
-    var squad_distribution = obj_creation.squad_distribution;
+    var equal_specialists = obj_creation.equal_specialists;
     var scout_company_behaviour = 0;
     if (struct_exists(obj_creation, "scout_company_behaviour")) {
         var scout_company_behaviour = obj_creation.scout_company_behaviour;
@@ -2328,21 +2438,15 @@ function scr_initialize_custom() {
         load_default_gear(eROLE.SCOUT, "Neophyte", "Bolter", "", "Scout Armour", "", "");
     }
 
-    var equal_scouts = (squad_distribution == 2 || squad_distribution == 3);
+    var equal_scouts = 0;
+    if (struct_exists(obj_creation, "equal_scouts")) {
+        var equal_scouts = obj_creation.equal_scouts;
+    }
     obj_ini.equal_scouts = equal_scouts; // for use in squad creation later
 
     var _moved_scouts = 0;
 
     var _coys = struct_get_names(companies);
-    // ensure 10th company is processed last so _moved_scouts is fully accumulated before its tacticals are set
-    var _tenth_idx = -1;
-    for (var _i = 0; _i < array_length(_coys); _i++) {
-        if (_coys[_i] == "tenth") { _tenth_idx = _i; break; }
-    }
-    if (_tenth_idx != -1 && _tenth_idx != array_length(_coys) - 1) {
-        array_delete(_coys, _tenth_idx, 1);
-        array_push(_coys, "tenth");
-    }
     function _is_terminator(_armour) {
         return array_contains(["Terminator Armour", "Tartaros"], _armour);
     }
@@ -2387,7 +2491,7 @@ function scr_initialize_custom() {
         /// comp 8: ass 100
         /// comp 9: dev 100
         /// comp 10: tac 40: scout 50;
-        if (squad_distribution == 1 || squad_distribution == 3) {
+        if (equal_specialists) {
             // LOGGER.info("balancing for equal specialists")
             // LOGGER.info($"equal_scouts? {equal_scouts}")
 
@@ -2624,7 +2728,7 @@ function scr_initialize_custom() {
                     _rolename = roles.captain;
                     _erole = eROLE.CAPTAIN;
                     _wep2 = choose_weighted(global.weapon_list_weighted_ranged_pistols);
-                    if (squad_distribution != 1 && squad_distribution != 3 && _coy.coy == 8) {
+                    if (equal_specialists == false && _coy.coy == 8) {
                         _mobi = "Jump Pack";
                     }
                     if (_coy.coy == 1 && _coy.terminators > 0) {
@@ -2638,7 +2742,7 @@ function scr_initialize_custom() {
                     _rolename = roles.chaplain;
                     _erole = eROLE.CHAPLAIN;
                     _wep2 = choose_weighted(global.weapon_list_weighted_ranged_pistols);
-                    if (squad_distribution != 1 && squad_distribution != 3 && _coy.coy == 8) {
+                    if (equal_specialists == false && _coy.coy == 8) {
                         _mobi = "Jump Pack";
                     }
                     if (_coy.coy == 1 && _coy.terminators > 0) {
@@ -2650,7 +2754,7 @@ function scr_initialize_custom() {
                     commands++;
                     _rolename = roles.apothecary;
                     _erole = eROLE.APOTHECARY;
-                    if (squad_distribution != 1 && squad_distribution != 3 && _coy.coy == 8) {
+                    if (equal_specialists == false && _coy.coy == 8) {
                         _mobi = "Jump Pack";
                     }
                     if (_coy.coy == 1 && _coy.terminators > 0) {
@@ -2681,7 +2785,7 @@ function scr_initialize_custom() {
                     commands++;
                     _rolename = roles.librarian;
                     _erole = eROLE.LIBRARIAN;
-                    if (squad_distribution != 1 && squad_distribution != 3 && _coy.coy == 8) {
+                    if (equal_specialists == false && _coy.coy == 8) {
                         _mobi = "Jump Pack";
                     }
                     if (_coy.coy == 1 && _coy.terminators > 0) {
@@ -3022,6 +3126,15 @@ function scr_initialize_custom() {
     LOGGER.info("set up the starting squads");
     obj_ini.squads = {};
     game_start_squads();
+    // Command groups get bespoke starting squads: Chapter Master + all Honour Guards together,
+    // and each institution's master + 4 specialists (rest in 5-man squads).
+    squad_up_command_groups();
+    // Line companies are squadded by their templates above; squad up anyone still loose (line
+    // stragglers, dreadnoughts, any leftover specialist) so they have a squad -- and therefore the
+    // Squad View UI and deployability -- from the very first turn.
+    squad_up_loose_marines();
+    // Give each squad one of its company's vehicles where available (one per squad).
+    preassign_vehicles_to_squads();
 }
 
 /// @description helper function to streamline code inside of scr_initialize_custom, should only be used as part of

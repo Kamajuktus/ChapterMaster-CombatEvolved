@@ -259,7 +259,7 @@ function scr_enemy_ai_d() {
             if (irandom(100) > 33) {
                 // Give all marines +3d6 corruption and reduce loyalty by 20*/
                 var me = 0;
-                for (var co = 0; co <= obj_ini.companies; co++) {
+                for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
                     me = 0;
                     for (me = 0; me < array_length(obj_ini.role[co]); me++) {
                         if ((obj_ini.race[co][me] == 1) && (obj_ini.role[co][me] != "")) {
@@ -368,7 +368,7 @@ function scr_enemy_ai_d() {
             }
 
             if ((obj_controller.known[eFACTION.TYRANIDS] == 0) && (woop != 0) && (yep != false)) {
-                scr_popup("Shadow in the Warp", $"Chief {obj_ini.role[100][17]} " + string(obj_ini.name[0][5]) + " reports a disturbance in the warp.  He claims it is like a shadow.", "shadow", "");
+                scr_popup("Shadow in the Warp", $"Chief {obj_ini.role[100][17]} " + string(head_name("Chief " + string(obj_ini.role[100][17]))) + " reports a disturbance in the warp.  He claims it is like a shadow.", "shadow", "");
                 scr_event_log("red", $"Chief {obj_ini.role[100][17]} reports a disturbance in the warp.  He claims it is like a shadow.");
             }
             if ((obj_controller.known[eFACTION.TYRANIDS] == 0) && (woop == 0) && (yep != false)) {

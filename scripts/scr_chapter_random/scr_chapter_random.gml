@@ -67,7 +67,7 @@ function scr_chapter_random(custom_or_random) {
     recruiter = global.name_generator.GenerateFromSet("space_marine");
     admiral = global.name_generator.GenerateFromSet("space_marine");
 
-    squad_distribution = 0;
+    equal_specialists = 0;
     load_to_ships = [
         2,
         0,

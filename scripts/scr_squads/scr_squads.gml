@@ -1,3 +1,6 @@
+// Hard cap on how many marines may belong to a single squad, regardless of type.
+#macro SQUAD_MAX_MEMBERS 10
+
 function fetch_squad(array_id) {
     return obj_ini.squads[$ array_id];
 }
@@ -232,6 +235,7 @@ function UnitSquad(squad_type = undefined, company = 0) constructor {
     base_company = company;
     life_members = 0;
     nickname = "";
+    auto_named = true; // true while the squad name tracks its sergeant; false once the player renames it
     assignment = "none";
     class = [];
     squad_leader = "";
@@ -331,6 +335,12 @@ function UnitSquad(squad_type = undefined, company = 0) constructor {
                 array_delete(members, i, 1);
                 member_length--;
                 i--;
+                continue;
+            }
+            // Never promote a specialist / head (apothecary, librarian, chaplain, forge master,
+            // master of sanctity/apothecarion, captain, etc.) into a sergeant -- that would
+            // overwrite their role and can break the systems that rely on them existing.
+            if (is_specialist(_unit.role())) {
                 continue;
             }
             if (_unit.experience > highest_exp) {
@@ -705,429 +715,539 @@ function UnitSquad(squad_type = undefined, company = 0) constructor {
         }
         return mems;
     };
+
+    // Company "sign": the home group this squad belongs to, returned as a data label.
+    static display_label = function() {
+        if (base_company == 0) {
+            return "Headquarters";
+        }
+        if (base_company == GROUP_APOTHECARIUM) { return "Apothecarion"; }
+        if (base_company == GROUP_LIBRARIUM) { return "Librarium"; }
+        if (base_company == GROUP_RECLUSIUM) { return "Reclusium"; }
+        if (base_company == GROUP_ARMOURY) { return "Armoury"; }
+        var _label = scr_convert_company_to_string(base_company);
+        return (_label == "") ? "Unaffiliated" : _label;
+    };
+
+    // Derives a squad name from its sergeant/leader, 40k style ("Squad Tycho").
+    static name_from_leader = function() {
+        var _leader = determine_leader();
+        if (_leader != "none") {
+            var _unit = fetch_unit(_leader);
+            if (is_struct(_unit) && _unit.name() != "") {
+                var _parts = string_split(_unit.name(), " ");
+                var _surname = _parts[array_length(_parts) - 1];
+                return $"Squad {_surname}";
+            }
+        }
+        if (variable_struct_exists(self, "display_name") && is_string(display_name) && display_name != "") {
+            return display_name;
+        }
+        return "Unnamed Squad";
+    };
+
+    // The squad's individual name: the player override if one is set, otherwise auto from the sergeant.
+    static squad_name = function() {
+        if (!auto_named && nickname != "") {
+            return nickname;
+        }
+        return name_from_leader();
+    };
+
+    // Player-facing rename. An empty string reverts to auto (sergeant-derived) naming.
+    static set_custom_name = function(new_name) {
+        new_name = string_trim(new_name);
+        nickname = new_name;
+        auto_named = (new_name == "");
+        return squad_name();
+    };
+
+    // Keeps the auto name in step with the current sergeant; a no-op once the player has renamed.
+    static refresh_auto_name = function() {
+        if (auto_named) {
+            nickname = "";
+        }
+        return squad_name();
+    };
+}
+
+// Moves a single marine from its current squad into another squad, recomputing
+// both squads' composition and leadership afterwards. Returns true on success.
+function move_marine_to_squad(unit, new_squad_uid) {
+    if (!is_struct(unit) || unit.name() == "") {
+        return false;
+    }
+    var _old_uid = unit.squad;
+    if (_old_uid == new_squad_uid) {
+        return false;
+    }
+    var _new_squad = fetch_squad(new_squad_uid);
+    if (!is_struct(_new_squad)) {
+        return false;
+    }
+    // A squad may hold at most SQUAD_MAX_MEMBERS marines.
+    if (array_length(_new_squad.members) >= SQUAD_MAX_MEMBERS) {
+        return false;
+    }
+    // Dreadnoughts fight alone: nothing may join a dreadnought's squad, and a dreadnought may
+    // not be moved into another squad (it stays the leader of its own). Detected by armour
+    // (covers both "Dreadnought" and "Venerable Dreadnought").
+    if (unit.is_dreadnought()) {
+        return false;
+    }
+    if (squad_has_dreadnought(_new_squad)) {
+        return false;
+    }
+    unit.add_to_squad(new_squad_uid); // removes from the old squad first
+
+    // Leadership: a sergeant moved into a squad that already has a sergeant becomes a trooper.
+    var _sgt = obj_ini.role[100][eROLE.SERGEANT];
+    var _vsgt = obj_ini.role[100][eROLE.VETERANSERGEANT];
+    if (unit.role() == _sgt || unit.role() == _vsgt) {
+        var _other_sgt = false;
+        for (var i = 0; i < array_length(_new_squad.members); i++) {
+            var _m = fetch_unit(_new_squad.members[i]);
+            if (!is_struct(_m) || _m.name() == "") {
+                continue;
+            }
+            if (_m.company == unit.company && _m.marine_number == unit.marine_number) {
+                continue;
+            }
+            if (_m.role() == _sgt || _m.role() == _vsgt) {
+                _other_sgt = true;
+                break;
+            }
+        }
+        if (_other_sgt) {
+            unit.update_role(squad_trooper_role(_new_squad, unit));
+            unit.alter_loyalty(-5);
+        }
+    }
+
+    if (_old_uid != "none") {
+        var _old_squad = fetch_squad(_old_uid);
+        if (is_struct(_old_squad)) {
+            // update_fulfilment promotes a fresh sergeant if the old one just left.
+            _old_squad.update_fulfilment();
+            _old_squad.determine_leader();
+        }
+    }
+    _new_squad.update_fulfilment();
+    _new_squad.determine_leader();
+    return true;
+}
+
+// The default trooper role for a squad, used when demoting an excess sergeant. Prefers an
+// existing non-sergeant member's role; falls back to the basic Tactical role.
+function squad_trooper_role(squad, exclude_unit = undefined) {
+    var _sgt = obj_ini.role[100][eROLE.SERGEANT];
+    var _vsgt = obj_ini.role[100][eROLE.VETERANSERGEANT];
+    for (var i = 0; i < array_length(squad.members); i++) {
+        var _m = fetch_unit(squad.members[i]);
+        if (!is_struct(_m) || _m.name() == "") {
+            continue;
+        }
+        if (exclude_unit != undefined && _m.company == exclude_unit.company && _m.marine_number == exclude_unit.marine_number) {
+            continue;
+        }
+        if (_m.role() != _sgt && _m.role() != _vsgt) {
+            return _m.role();
+        }
+    }
+    return obj_ini.role[100][eROLE.TACTICAL];
+}
+
+// Releases a squad from garrison/battle duty: clears its assignment and removes it from any
+// planet's operatives list and active battle. Used when its marines are pulled back to ship.
+function free_squad_from_garrison(squad_uid) {
+    if (squad_uid == "none" || squad_uid == "") {
+        return;
+    }
+    var _sq = fetch_squad(squad_uid);
+    if (is_struct(_sq)) {
+        _sq.assignment = "none";
+    }
+    with (obj_star) {
+        for (var p = 1; p <= planets; p++) {
+            var _ops = p_operatives[p];
+            for (var i = array_length(_ops) - 1; i >= 0; i--) {
+                if (is_struct(_ops[i]) && variable_struct_exists(_ops[i], "type") && _ops[i].type == "squad" && _ops[i].reference == squad_uid) {
+                    array_delete(_ops, i, 1);
+                }
+            }
+            if (is_struct(p_battle[p])) {
+                var _bs = p_battle[p];
+                for (var pl = 0; pl < array_length(_bs.places); pl++) {
+                    _bs.places[pl].remove_marine_squad(squad_uid);
+                }
+            }
+        }
+    }
+}
+
+// Recalls every garrisoned squad on a planet: frees them from duty and loads each marine
+// back onto its last ship (if that ship is in the system with room). Returns marines recalled.
+// Loads a squad's living members back onto their last ship (best effort).
+function load_squad_to_ships(system, squad_uid) {
+    var _loaded = 0;
+    var _mems = marine_squad_living_members(squad_uid);
+    for (var m = 0; m < array_length(_mems); m++) {
+        var _u = _mems[m];
+        if (is_struct(_u.last_ship) && variable_struct_exists(_u.last_ship, "uid")) {
+            var _ship_id = array_get_index(obj_ini.ship_uid, _u.last_ship.uid);
+            if (_ship_id >= 0) {
+                _u.load_marine(_ship_id, system);
+                _loaded++;
+            }
+        }
+    }
+    return _loaded;
+}
+
+// Recalls all NON-engaged garrison squads on a planet to their ships (free). Squads in direct
+// combat must use the per-squad escape instead.
+function recall_planet_garrison(system, planet) {
+    var _uids = planet_marine_squad_uids(system, planet);
+    var _recalled = 0;
+    for (var s = 0; s < array_length(_uids); s++) {
+        var _uid = _uids[s];
+        if (squad_is_engaged(_uid)) {
+            continue; // engaged squads escape via the battle screen (costs a command point)
+        }
+        free_squad_from_garrison(_uid);
+        _recalled += load_squad_to_ships(system, _uid);
+    }
+    return _recalled;
+}
+
+// True if a planet has deployed marine squads but no enemy squads present (i.e. idling).
+function planet_has_idle_squads(system, planet) {
+    if (is_struct(system.p_battle[planet]) && system.p_battle[planet].total_enemies() > 0) {
+        return false; // enemies present -> not idling
+    }
+    return array_length(planet_marine_squad_uids(system, planet)) > 0;
+}
+
+// True if any planet in the system has idling deployed squads (for the sector-view "Zzz").
+function system_has_idle_squads(system) {
+    for (var p = 1; p <= system.planets; p++) {
+        if (planet_has_idle_squads(system, p)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Recalls every idling squad across the system (planets with no enemy squads present) back to
+// their ships. Planets that still have enemies are left untouched.
+function recall_system_idle_squads(system) {
+    var _recalled = 0;
+    for (var p = 1; p <= system.planets; p++) {
+        if (!planet_has_idle_squads(system, p)) {
+            continue;
+        }
+        var _uids = planet_marine_squad_uids(system, p);
+        for (var s = 0; s < array_length(_uids); s++) {
+            free_squad_from_garrison(_uids[s]);
+            _recalled += load_squad_to_ships(system, _uids[s]);
+        }
+    }
+    return _recalled;
+}
+
+// Disengages a single squad from a battle and loads it onto its ships. Costs 1 command point.
+function escape_squad_from_battle(system, planet, squad_uid) {
+    // Need at least one valid ship to escape to, or the command point would be wasted.
+    var _mems = marine_squad_living_members(squad_uid);
+    var _has_ship = false;
+    for (var m = 0; m < array_length(_mems); m++) {
+        var _ls = _mems[m].last_ship;
+        if (is_struct(_ls) && variable_struct_exists(_ls, "uid") && array_get_index(obj_ini.ship_uid, _ls.uid) >= 0) {
+            _has_ship = true;
+            break;
+        }
+    }
+    if (!_has_ship) {
+        return false;
+    }
+    if (!spend_command_point(system, planet, 1)) {
+        return false; // no command points left this turn
+    }
+    free_squad_from_garrison(squad_uid);
+    load_squad_to_ships(system, squad_uid);
+    return true;
+}
+
+// Picks an appropriate squad type for a lone marine based on their role.
+function role_to_squad_type(role_name) {
+    var _r = obj_ini.role[100];
+    // Only explicit line-trooper roles use line squad types (which may auto-promote a lone
+    // member to sergeant). EVERY other role -- specialists, HQ, senior titles like "Forge
+    // Master", dreadnoughts, or anything unrecognised -- goes into a command_squad, which has
+    // no Sergeant requirement, so update_fulfilment can never overwrite their role.
+    var _type = "command_squad";
+    if (role_name == _r[eROLE.TACTICAL] || role_name == _r[eROLE.SERGEANT] || role_name == _r[eROLE.VETERANSERGEANT]) {
+        _type = "tactical_squad";
+    } else if (role_name == _r[eROLE.DEVASTATOR]) {
+        _type = "devastator_squad";
+    } else if (role_name == _r[eROLE.ASSAULT]) {
+        _type = "assault_squad";
+    } else if (role_name == _r[eROLE.TERMINATOR]) {
+        _type = "terminator_squad";
+    } else if (role_name == _r[eROLE.VETERAN]) {
+        _type = "veteran_squad";
+    } else if (role_name == _r[eROLE.SCOUT]) {
+        _type = "scout_squad";
+    }
+    if (!struct_exists(obj_ini.squad_types, _type)) {
+        _type = "tactical_squad";
+    }
+    return _type;
+}
+
+// True if any member of a squad is a dreadnought (by armour, so "Venerable Dreadnought" counts).
+function squad_has_dreadnought(squad) {
+    for (var i = 0; i < array_length(squad.members); i++) {
+        var _m = fetch_unit(squad.members[i]);
+        if (is_struct(_m) && _m.name() != "" && _m.is_dreadnought()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Builds a single squad from a list of squadless marine structs (first becomes the basis for the
+// squad type/company; the highest-ranking member ends up as leader). Returns the squad uid, or
+// "none" if no valid members. Used for the bespoke game-start command/specialist squads.
+function build_squad_from_units(unit_list) {
+    var _valid = [];
+    for (var i = 0; i < array_length(unit_list); i++) {
+        var _u = unit_list[i];
+        if (is_struct(_u) && _u.name() != "" && _u.squad == "none") {
+            array_push(_valid, _u);
+        }
+    }
+    if (array_length(_valid) == 0) {
+        return "none";
+    }
+    var _leader = _valid[0];
+    var _sq = new UnitSquad(role_to_squad_type(_leader.role()), _leader.company);
+    obj_ini.squads[$ _sq.uid] = _sq;
+    for (var i = 0; i < array_length(_valid); i++) {
+        _valid[i].add_to_squad(_sq.uid);
+    }
+    _sq.base_company = _leader.company;
+    _sq.update_fulfilment();
+    _sq.determine_leader();
+    return _sq.uid;
+}
+
+// Game-start squads for the command groups (called once, before squad_up_loose_marines):
+//   - HQ: the Chapter Master leads a squad of up to 10 (himself + 9 Honour Guards); any further
+//     Honour Guards form additional 10-man squads.
+//   - Each institution: its master + 4 free specialists form a command squad; any remaining
+//     specialists are grouped into 5-man squads.
+function squad_up_command_groups() {
+    // --- Headquarters: Chapter Master + Honour Guards, in squads of at most SQUAD_MAX_MEMBERS ---
+    var _cm_role = obj_ini.role[100][eROLE.CHAPTERMASTER];
+    var _hg_role = obj_ini.role[100][eROLE.HONOURGUARD];
+    var _hq = obj_ini.TTRPG[0];
+    var _hq_units = [];
+    for (var i = 0; i < array_length(_hq); i++) { // Chapter Master leads the first squad
+        var _u = _hq[i];
+        if (is_struct(_u) && _u.name() != "" && _u.squad == "none" && _u.role() == _cm_role) {
+            array_push(_hq_units, _u);
+        }
+    }
+    for (var i = 0; i < array_length(_hq); i++) { // then every Honour Guard
+        var _u = _hq[i];
+        if (is_struct(_u) && _u.name() != "" && _u.squad == "none" && _u.role() == _hg_role) {
+            array_push(_hq_units, _u);
+        }
+    }
+    // Split into 10-man squads: first is CM + 9 Honour Guards, rest are 10 Honour Guards each.
+    while (array_length(_hq_units) > 0) {
+        var _hq_chunk = [];
+        while (array_length(_hq_chunk) < SQUAD_MAX_MEMBERS && array_length(_hq_units) > 0) {
+            array_push(_hq_chunk, _hq_units[0]);
+            array_delete(_hq_units, 0, 1);
+        }
+        build_squad_from_units(_hq_chunk);
+    }
+
+    // --- Institutions: master + 4 specialists, then the rest in 5-man squads ---
+    var _groups = [GROUP_APOTHECARIUM, GROUP_LIBRARIUM, GROUP_RECLUSIUM, GROUP_ARMOURY];
+    for (var g = 0; g < array_length(_groups); g++) {
+        var _comp = obj_ini.TTRPG[_groups[g]];
+        var _heads = [];
+        var _rest = [];
+        for (var i = 0; i < array_length(_comp); i++) {
+            var _u = _comp[i];
+            if (!is_struct(_u) || _u.name() == "" || _u.squad != "none") {
+                continue;
+            }
+            if (is_specialist(_u.role(), SPECIALISTS_HEADS)) {
+                array_push(_heads, _u); // the institution master
+            } else {
+                array_push(_rest, _u);
+            }
+        }
+        // First squad: the master plus up to four specialists (5 total).
+        var _first = _heads;
+        while (array_length(_first) < 5 && array_length(_rest) > 0) {
+            array_push(_first, _rest[0]);
+            array_delete(_rest, 0, 1);
+        }
+        if (array_length(_first) > 0) {
+            build_squad_from_units(_first);
+        }
+        // Remaining specialists in 5-man squads.
+        while (array_length(_rest) > 0) {
+            var _chunk = [];
+            while (array_length(_chunk) < 5 && array_length(_rest) > 0) {
+                array_push(_chunk, _rest[0]);
+                array_delete(_rest, 0, 1);
+            }
+            build_squad_from_units(_chunk);
+        }
+    }
+}
+
+// Creates a new single-member squad for a squadless marine, with them as its leader. The unit
+// keeps its role (no forced promotion), so specialists / HQ / dreadnoughts stay themselves.
+function form_new_squad_for(unit) {
+    if (!is_struct(unit) || unit.name() == "" || unit.squad != "none") {
+        return "none";
+    }
+    // Any chapter member may form a squad: line troops (base_group "astartes") plus all
+    // specialists, masters, honour guard and dreadnoughts (caught by is_specialist).
+    if (unit.base_group != "astartes" && !is_specialist(unit.role())) {
+        return "none";
+    }
+    var _sq = new UnitSquad(role_to_squad_type(unit.role()), unit.company);
+    obj_ini.squads[$ _sq.uid] = _sq;
+    unit.add_to_squad(_sq.uid);
+    _sq.base_company = unit.company;
+    // update_fulfilment promotes a lone line trooper to sergeant (the leader of its new squad);
+    // specialists / HQ / dreadnoughts use command_squad which has no sergeant requirement, so
+    // their roles are left untouched.
+    _sq.update_fulfilment();
+    _sq.determine_leader();
+    return _sq.uid;
+}
+
+// Any controllable marine without a squad (line troops, HQ, specialists, dreadnoughts) forms a
+// new single-member squad in their company so it can be deployed. Includes HQ (company 0).
+// Iterates the full TTRPG company arrays (slots can run past 100 -- dreadnoughts and other
+// late-added units sit at high indices, so a hard 0..100 cap silently skipped them).
+function squad_up_loose_marines() {
+    for (var comp = 0; comp <= STORAGE_GROUP_MAX; comp++) {
+        var _company = obj_ini.TTRPG[comp];
+        var _slots = array_length(_company);
+        for (var num = 0; num < _slots; num++) {
+            var _u = fetch_unit([comp, num]);
+            if (!is_struct(_u) || _u.name() == "") {
+                continue;
+            }
+            if (_u.squad != "none") {
+                continue;
+            }
+            // Line troops, specialists, masters, honour guard and dreadnoughts are all eligible.
+            if (_u.base_group != "astartes" && !is_specialist(_u.role())) {
+                continue;
+            }
+            if (!_u.controllable()) {
+                continue;
+            }
+            form_new_squad_for(_u);
+        }
+    }
+}
+
+// --- Vehicle <-> squad assignment ------------------------------------------------------
+// Vehicles are linked to squads on the vehicle side (obj_ini.veh_squad), so the link
+// survives scr_vehicle_order compaction.
+
+function vehicle_owner_squad(co, slot) {
+    return obj_ini.veh_squad[co][slot];
+}
+
+function assign_vehicle_to_squad(co, slot, squad_uid) {
+    // Only one vehicle may be assigned per squad.
+    if (array_length(squad_vehicle_slots(squad_uid)) > 0) {
+        return false;
+    }
+    obj_ini.veh_squad[co][slot] = squad_uid;
+    return true;
+}
+
+// Assigns one spare company vehicle to each squad that has none (used at game start).
+function preassign_vehicles_to_squads() {
+    var _names = struct_get_names(obj_ini.squads);
+    for (var i = 0; i < array_length(_names); i++) {
+        var _sq = obj_ini.squads[$ _names[i]];
+        if (!is_struct(_sq)) {
+            continue;
+        }
+        if (array_length(squad_vehicle_slots(_sq.uid)) > 0) {
+            continue; // already has a vehicle
+        }
+        var _free = company_unassigned_vehicle_slots(_sq.base_company);
+        if (array_length(_free) > 0) {
+            assign_vehicle_to_squad(_sq.base_company, _free[0], _sq.uid);
+        }
+    }
+}
+
+function unassign_vehicle_from_squad(co, slot) {
+    obj_ini.veh_squad[co][slot] = "";
+}
+
+// All [company, slot] vehicle references currently assigned to a squad.
+function squad_vehicle_slots(squad_uid) {
+    var _out = [];
+    if (squad_uid == "none" || squad_uid == "") {
+        return _out;
+    }
+    for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
+        var _len = array_length(obj_ini.veh_role[co]);
+        for (var slot = 0; slot < _len; slot++) {
+            if (obj_ini.veh_role[co][slot] != "" && obj_ini.veh_squad[co][slot] == squad_uid) {
+                array_push(_out, [co, slot]);
+            }
+        }
+    }
+    return _out;
+}
+
+// Vehicle slots in a company that belong to no squad (available to assign). Vehicles whose
+// owning squad no longer exists are treated as free (and the stale link is cleared).
+function company_unassigned_vehicle_slots(co) {
+    var _out = [];
+    var _len = array_length(obj_ini.veh_role[co]);
+    for (var slot = 0; slot < _len; slot++) {
+        if (obj_ini.veh_role[co][slot] == "") {
+            continue;
+        }
+        var _owner = obj_ini.veh_squad[co][slot];
+        if (_owner != "" && !struct_exists(obj_ini.squads, _owner)) {
+            obj_ini.veh_squad[co][slot] = ""; // self-heal: owning squad is gone
+            _owner = "";
+        }
+        if (_owner == "") {
+            array_push(_out, slot);
+        }
+    }
+    return _out;
 }
 
 // creates the origional distribution of squads accross the chapter
 // lots of room for customisation of different chapters here
 
-function get_compay_squad_arrangement(company){
-    var _comp_datas = obj_ini.chapter_squad_arrangement.companies;
-    for (var i = 0; i < array_length(_comp_datas); i++) {
-        if (_comp_datas[i].company == company){
-            return _comp_datas[i];
-        }
-    }
-
-}
-
-function ProportionalSquadEditor(data) constructor {
-    move_data_to_current_scope(data);
-
-    deleted = false;
-
-    static draw = function() {
-        box.draw();
-        proportion_val_shift.draw();
-        squad_title.draw();
-        required_squad.proportion = max(proportion_val_shift.current_value, 1);
-        if (delete_button.draw()) {
-            for (var i = 0; i < array_length(arrangement); i++) {
-                var _squad = arrangement[i];
-                if (!struct_exists(_squad, "require") || _squad.require != true) {
-                    if (required_squad.squad == _squad.squad) {
-                        array_delete(arrangement, i, 1);
-                        deleted = true;
-                        deleted = true;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-function RequireSquadEditor(data) constructor{
-    move_data_to_current_scope(data);
-    
-    deleted = false;
-    static draw = function(){
-        box.draw();
-        min_val_shift.update({
-            max_clamp : max_val_shift.current_value
-        });
-        min_val_shift.draw();
-        max_val_shift.draw();
-        squad_title.draw();
-        required_squad.min_count = max(min_val_shift.current_value, 1);
-        required_squad.max_count = max_val_shift.current_value;
-        if (delete_button.draw()){
-            for (var i=0;i<array_length(arrangement);i++){
-                var _squad = arrangement[i]
-                if (struct_exists(_squad, "require") && _squad.require == true){
-                    if (required_squad.squad == _squad.squad){
-                        array_delete(arrangement, i, 1);
-                        break;
-                    }
-                }
-            }            
-        }
-    }
-}
-function SquadArrangementEditor(company) constructor {
-    self.company = company;
-    arrangement = get_compay_squad_arrangement(company).squads;
-    squads = obj_ini.squad_types;
-
-    // --- layout constants (all derived from required_editor_box) ---
-    static y_top = 175;
-    static column_gap = 25;
-    static column_w = 200;
-
-    required_editor_box = new Box({
-        x1 : 100,
-        w  : column_w,
-        y1 : y_top,
-        h  : 1000,
-    });
-
-    static required_picker_x = function() {
-        return required_editor_box.x2 + column_gap; 
-    }
-
-    static proportional_editor_x  = function() {
-        return required_picker_x() + column_w + column_gap;
-    }
-
-    static proportional_picker_x  = function() {
-        return proportional_editor_x() + column_w + column_gap;
-    }
-
-    required_types = [];
-    required_y = y_top;
-    proportional_types = [];
-    proportional_y = y_top;
-
-    showing_required_picker = false;
-    showing_proportional_picker = false;
-    required_picker_options = [];
-    proportional_picker_options = [];
-
-    static get_squads_not_in_arrangement = function(require_filter, picker_x, picker_start_y) {
-        var _available  = [];
-        var _squad_keys = struct_get_names(squads);
-        var _py         = picker_start_y;
-        for (var i = 0; i < array_length(_squad_keys); i++) {
-            var _key = _squad_keys[i];
-            var _already_present = false;
-            for (var j = 0; j < array_length(arrangement); j++) {
-                var _arr_squad  = arrangement[j];
-                var _is_required = struct_exists(_arr_squad, "require") && _arr_squad.require == true;
-                if (_arr_squad.squad == _key && _is_required == require_filter) {
-                    _already_present = true;
-                    break;
-                }
-            }
-            if (!_already_present) {
-                var _squad_data = squads[$ _key];
-                var _btn = new UnitButtonObject({
-                    style : "pixel",
-                    label : _squad_data.type_data.display_data,
-                    tooltip : $"add {_key} as a {require_filter ? "required" : "proportional"} squad",
-                    set_width : true,
-                    x1 : picker_x,
-                    y1 : _py,
-                    w : column_w,
-                });
-                _py += _btn.h + 4;
-                array_push(_available, { key : _key, btn : _btn });
-            }
-        }
-        return _available;
-    }
-
-    static add_new_required_type = function(required_squad) {
-        var _squad_data = squads[$ required_squad.squad];
-        var _squad_display = _squad_data.type_data.display_data;
-        var _cx = required_editor_box.x1 + (required_editor_box.w / 2);
-
-        var box = new Box({
-            x1 : required_editor_box.x1,
-            y1 : required_y,
-            w  : required_editor_box.w,
-            h  : 80,
-        });
-
-        var squad_title = new ReactiveString(
-            _squad_display,
-            _cx,
-            required_y + 5,
-            { halign : fa_center }
-        );
-
-        var max_val_shift = new ValueShifter(
-            "max",
-            {
-                current_value : required_squad.max_count,
-                x1 : _cx,
-                y1 : required_y + 25,
-                max_clamp : 50,
-                min_clamp : 1,
-            },
-        );
-
-        var min_val_shift = new ValueShifter(
-            "min",
-            {
-                current_value : required_squad.min_count,
-                x1 : _cx,
-                y1 : required_y + 55,
-                min_clamp : 1,
-                max_clamp : 50,
-            },
-        );
-
-        var delete_button = new UnitButtonObject({
-            style : "pixel",
-            label : "remove squad",
-            tooltip : $"remove {_squad_display} from required squads",
-            set_width : true,
-            x1 : required_editor_box.x1,
-            y1 : box.y2,
-            w : required_editor_box.w,
-        });
-
-        var _edit = new RequireSquadEditor({
-            required_squad,
-            box,
-            max_val_shift,
-            min_val_shift,
-            squad_title,
-            delete_button,
-        });
-
-        array_push(required_types, _edit);
-        required_y = delete_button.y2 + 10;
-    }
-
-    static add_new_proportional_type = function(required_squad) {
-        var _squad_data = squads[$ required_squad.squad];
-        var _squad_display = _squad_data.type_data.display_data;
-        var _px = proportional_editor_x();
-        var _cx = _px + (column_w / 2);
-
-        var box = new Box({
-            x1 : _px,
-            y1 : proportional_y,
-            w : column_w,
-            h : 50,
-        });
-
-        var squad_title = new ReactiveString(
-            _squad_display,
-            _cx,
-            proportional_y + 5,
-            { halign : fa_center }
-        );
-
-        var proportion_val_shift = new ValueShifter(
-            "proportion",
-            {
-                current_value : required_squad.proportion,
-                x1 : _cx,
-                y1 : proportional_y + 25,
-                min_clamp : 1,
-                max_clamp : 50,
-            },
-        );
-
-        var delete_button = new UnitButtonObject({
-            style : "pixel",
-            label : "remove squad",
-            tooltip : $"remove {_squad_display} from proportional squads",
-            set_width : true,
-            x1 : _px,
-            y1 : box.y2,
-            w : column_w,
-        });
-
-        var _edit = new ProportionalSquadEditor({
-            required_squad,
-            box,
-            proportion_val_shift,
-            squad_title,
-            delete_button,
-            arrangement,
-        });
-
-        array_push(proportional_types, _edit);
-        proportional_y = delete_button.y2 + 10;
-    }
-
-    // --- reset ---
-
-    static reset_required_squads = function() {
-        required_types = [];
-        required_y     = y_top;
-        for (var i = 0; i < array_length(arrangement); i++) {
-            var _squad = arrangement[i];
-            if (struct_exists(_squad, "require") && _squad.require == true) {
-                add_new_required_type(_squad);
-            }
-        }
-    }
-
-    static reset_proportional_squads = function() {
-        proportional_types = [];
-        proportional_y     = y_top;
-        for (var i = 0; i < array_length(arrangement); i++) {
-            var _squad = arrangement[i];
-            if (!struct_exists(_squad, "require") || _squad.require != true) {
-                add_new_proportional_type(_squad);
-            }
-        }
-    }
-
-    // --- picker openers ---
-
-    static open_required_picker = function() {
-        required_picker_options = get_squads_not_in_arrangement(true,  required_picker_x(),     add_required_button.y2 + 4);
-        showing_required_picker = true;
-        showing_proportional_picker = false;
-        proportional_picker_options = [];
-    }
-
-    static open_proportional_picker = function() {
-        proportional_picker_options = get_squads_not_in_arrangement(false, proportional_picker_x(), add_proportional_button.y2 + 4);
-        showing_proportional_picker = true;
-        showing_required_picker = false;
-        required_picker_options = [];
-    }
-
-    // --- picker drawers ---
-
-    static draw_required_picker = function() {
-        for (var i = 0; i < array_length(required_picker_options); i++) {
-            var _option = required_picker_options[i];
-            if (_option.btn.draw()) {
-                array_push(arrangement, {
-                    squad     : _option.key,
-                    min_count : 1,
-                    max_count : 1,
-                    require   : true,
-                });
-                showing_required_picker = false;
-                required_picker_options = [];
-                reset_required_squads();
-            }
-        }
-    }
-
-    static draw_proportional_picker = function() {
-        for (var i = 0; i < array_length(proportional_picker_options); i++) {
-            var _option = proportional_picker_options[i];
-            if (_option.btn.draw()) {
-                array_push(arrangement, {
-                    squad      : _option.key,
-                    proportion : 1,
-                });
-                showing_proportional_picker = false;
-                proportional_picker_options = [];
-                reset_proportional_squads();
-            }
-        }
-    }
-
-    // --- labels ---
-
-    required_string = new ReactiveString(
-        "Required Squads",
-        required_editor_box.x1,
-        y_top - 30,
-        { tooltip : "Required Squads will always get filled and created first" }
-    )
-
-    proportional_string = new ReactiveString(
-        "Proportional Squads",
-        proportional_editor_x(),
-        y_top - 30,
-        { tooltip : "Proportional Squads will be built proportionally to other proportional squads — e.g. if Tactical is 1 and Bikers is 2, the system will make 2 Biker squads for every 1 Tactical squad" }
-    )
-
-    // --- add buttons (top of their picker column, y tracks below last editor on reset) ---
-
-    add_required_button = new UnitButtonObject({
-        style : "pixel",
-        label : "add required squad",
-        tooltip : "add a new required squad to this company",
-        set_width : true,
-        x1 : required_picker_x(),
-        y1 : y_top,
-        w : column_w,
-    });
-
-    add_proportional_button = new UnitButtonObject({
-        style : "pixel",
-        label : "add proportional squad",
-        tooltip : "add a new proportional squad to this company",
-        set_width : true,
-        x1 : proportional_picker_x(),
-        y1 : y_top,
-        w : column_w,
-    });
-
-    reset_required_squads();
-    reset_proportional_squads();
-
-    // --- draw ---
-
-    static draw = function() {
-        var _reset_required_structs     = false;
-        var _reset_proportional_structs = false;
-
-        required_string.draw();
-        for (var i = 0; i < array_length(required_types); i++) {
-            var _squad = required_types[i];
-            _squad.draw();
-            if (_squad.deleted) {
-                _reset_required_structs = true;
-            }
-        }
-        if (add_required_button.draw()) {
-            open_required_picker();
-        }
-        if (showing_required_picker) {
-            draw_required_picker();
-        }
-
-        proportional_string.draw();
-        for (var i = 0; i < array_length(proportional_types); i++) {
-            var _squad = proportional_types[i];
-            _squad.draw();
-            if (_squad.deleted) {
-                _reset_proportional_structs = true;
-            }
-        }
-        if (add_proportional_button.draw()) {
-            open_proportional_picker();
-        }
-        if (showing_proportional_picker) {
-            draw_proportional_picker();
-        }
-
-        if (_reset_required_structs) {
-            reset_required_squads();
-        }
-        if (_reset_proportional_structs) {
-            reset_proportional_squads();
-        }
-    }
-}
-
 function game_start_squads() {
     obj_ini.squads = {};
     if (struct_exists(chapter_squad_arrangement, "companies")) {
-        var _comp_datas = obj_ini.chapter_squad_arrangement.companies;
+        var _comp_datas = chapter_squad_arrangement.companies;
         for (var i = 0; i < array_length(_comp_datas); i++) {
             var _company = collect_company(_comp_datas[i].company);
             _company.organise_by_template(_comp_datas[i]);

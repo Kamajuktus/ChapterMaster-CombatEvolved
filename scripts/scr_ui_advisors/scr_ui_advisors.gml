@@ -51,7 +51,7 @@ function scr_ui_advisors() {
             draw_set_color(c_gray);
             draw_set_font(fnt_40k_30b);
             draw_text_transformed(xx + 336 + 16, yy + 66, "Reclusium", 1, 1, 0);
-            draw_text_transformed(xx + 336 + 16, yy + 100, string_hash_to_newline("Master of Sanctity " + string(obj_ini.name[0][2])), 0.6, 0.6, 0);
+            draw_text_transformed(xx + 336 + 16, yy + 100, string_hash_to_newline("Master of Sanctity " + string(head_name("Master of Sanctity"))), 0.6, 0.6, 0);
         }
         if (menu_adept == 1) {
             // draw_sprite(spr_advisors,0,xx+16,yy+43);
@@ -834,7 +834,7 @@ function scr_ui_advisors() {
         draw_text(xx + 222.5, yy + 200.5, "Kills:");
 
         draw_text_ext(xx + 222, yy + 216, string_hash_to_newline(string(tot_ki)), -1, 396);
-        var unit = fetch_unit([0, 1]);
+        var unit = fetch_unit([0, 0]);
         if (unit.ship_location == -1) {
             draw_text(xx + 222, yy + 380, string_hash_to_newline($"Current Location: {unit.location_string} {unit.planet_location}#Health: " + unit.hp() + "%"));
         }

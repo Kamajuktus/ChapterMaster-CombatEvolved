@@ -42,6 +42,8 @@ function GameError(_header, _message, _stacktrace = "", _critical = false, _repo
             $"- Current Turn: {turn}",
             $"- Game Seed: {seed}",
             "",
+            $"### Reporter: {username}",
+            "",
             "### Error Details:",
             message,
             "",
@@ -230,7 +232,7 @@ function ErrorHandler() constructor {
 
         try {
             var embed = new DiscordEmbed();
-            embed.SetTitle("Error Details").SetDescription(pending_error.full_log).SetColor(0x00ff00).AddField("Username:", pending_error.username);
+            embed.SetTitle("Error Details").SetDescription(pending_error.full_log).SetColor(0x00ff00).AddField("Username", pending_error.username);
 
             if (_user_text != "") {
                 embed.AddField("User Message:", _user_text);

@@ -20,6 +20,16 @@ function scr_load(save_part, save_id) {
         LOGGER.info("Loading GLOBALS");
         // Globals
         var globals = obj_saveload.GameSave.Save;
+
+        // Storage-layout compatibility: pre-refactor saves stored the institution heads and free
+        // specialists in company 0 and had no institutions (groups 11-14). They will reload into
+        // the wrong groups, so warn the player to start fresh.
+        var _save_format = struct_exists(globals, "save_format") ? globals.save_format : 1;
+        if (_save_format != SAVE_FORMAT_CURRENT) {
+            LOGGER.error($"Incompatible save_format {_save_format} (expected {SAVE_FORMAT_CURRENT}). This save predates the chapter-organisation refactor; loaded state will be misfiled.");
+            show_message("This save predates the chapter-organisation update and is no longer compatible.\n\nInstitution staff (Apothecarion / Librarium / Reclusium / Armoury) will be misfiled. Please start a new campaign.");
+        }
+
         scr_load_chapter_icon(globals.icon_name, true);
         global.chapter_name = globals.chapter_name;
         global.custom = globals.custom;

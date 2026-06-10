@@ -168,7 +168,7 @@ function scr_dialogue(diplo_keyphrase, data = {}) {
         // MoS cuts in
         if (diplo_keyphrase == "cs_meeting_m1") {
             diplomacy = -5.2;
-            diplo_text = $"[[{obj_ini.name[0][3]} hisses your name over a private vox channel.]]\n";
+            diplo_text = "[[" + head_name("Master of Sanctity") + " hisses your name over a private vox channel.]]\n";
             diplo_text += "My lord!  What are we doing here, treating with this monster of the Traitor Legions? The very existence of the Archenemy is a threat to everything the Chapter stands for, and we endanger our immortal souls just being here. You know this! I demand to know your intentions! And I warn you, I will not hesitate to do what I must, for the good of the Chapter and the Imperium.";
 
             var _goto = "cs_meeting_m2";
@@ -184,18 +184,19 @@ function scr_dialogue(diplo_keyphrase, data = {}) {
                 }
             }
 
-            if ((obj_ini.TTRPG[0][3].corruption >= 50) && (born == true)) {
+            var _mos = find_head("Master of Sanctity");
+            if ((_mos != "none") && (_mos.corruption >= 50) && (born == true)) {
                 add_diplomacy_option({option_text: "Right now I need my Master of Sanctity at my side, trusting that his Chapter Master is doing what is best, what is necessary for the Chapter, during this dangerous moment. All will be made clear in time, I promise you brother. This is the right path.", goto: "cs_meeting_m3"});
             }
         }
         if (diplo_keyphrase == "cs_meeting_m2") {
             event_log = $"The {global.chapter_name} Master of Sanctity takes a stand against you.";
             scr_event_log("purple", event_log); // scr_alert("purple","lol",string(tix),0,0);
-            diplo_text = "You have besmirched the honor of our chapter this day, and I will not forget it /my lord Chapter Master/.\n[[" + string(obj_ini.name[0][3]) + " strides forward and his shout erupts from his external vox speakers with a boom that shatters the silence in the room.]]\nWe will not stand idly by and bandy words with heretic scum! To me my brothers! Slay these traitors in the name of our Emperor!";
+            diplo_text = "You have besmirched the honor of our chapter this day, and I will not forget it /my lord Chapter Master/.\n[[" + head_name("Master of Sanctity") + " strides forward and his shout erupts from his external vox speakers with a boom that shatters the silence in the room.]]\nWe will not stand idly by and bandy words with heretic scum! To me my brothers! Slay these traitors in the name of our Emperor!";
             add_diplomacy_option({option_text: "[Continue]", goto: "cs_meeting9"});
         }
         if (diplo_keyphrase == "cs_meeting_m3") {
-            diplo_text = "[[" + string(obj_ini.name[0][3]) + " is silent for a moment, before giving you an imperceptible nod.]]\nI stand with you, Lord " + string(obj_ini.master_name) + ". Let us face this together.";
+            diplo_text = "[[" + head_name("Master of Sanctity") + " is silent for a moment, before giving you an imperceptible nod.]]\nI stand with you, Lord " + string(obj_ini.master_name) + ". Let us face this together.";
             add_diplomacy_option({option_text: "[Continue]", goto: "cs_meeting20"});
             obj_controller.useful_info += "CRMOS|";
         }
@@ -216,12 +217,13 @@ function scr_dialogue(diplo_keyphrase, data = {}) {
 
             diplo_text = $"[[{obj_controller.faction_leader[eFACTION.CHAOS]} turns to you, his voice even and calm]]\n\nHere is the first step you must take, to prove you’ve truly left the Imperium behind. Kill him. Kill your loyal brothers.\n[[His Chaos Terminators raise their weapons as one and point them at you. Somewhere behind them a daemon cackles.]]\nChoose now or be obliterated.";
 
-            var _master_of_sanct = fetch_unit([0, 3]);
+            var _master_of_sanct = find_head("Master of Sanctity");
+            var _mos_name = (_master_of_sanct == "none") ? "your Master of Sanctity" : _master_of_sanct.name();
 
-            var _string = $"Stand with me my brothers! Fight for the future of your Chapter, and slay {_master_of_sanct.name()}!  [Battle loyalist  {global.chapter_name}";
+            var _string = $"Stand with me my brothers! Fight for the future of your Chapter, and slay {_mos_name}!  [Battle loyalist  {global.chapter_name}";
             add_diplomacy_option({option_text: _string, goto: "cs_meeting_battle1", goto: "cs_meeting_battle1"});
 
-            var _string = $"{global.chapter_name}, I order you to hold your fire! {_master_of_sanct.name()}, if you doubt my leadership then let it be decided by single combat! [Duel your Master of Sanctity]";
+            var _string = $"{global.chapter_name}, I order you to hold your fire! {_mos_name}, if you doubt my leadership then let it be decided by single combat! [Duel your Master of Sanctity]";
             add_diplomacy_option({option_text: _string, goto: "cs_meeting_battle2"});
 
             var _string = $"I deny you {obj_controller.faction_leader[eFACTION.CHAOS]}.  And now I shall destroy you.  For the Emperor! [Attack Chaos forces]";

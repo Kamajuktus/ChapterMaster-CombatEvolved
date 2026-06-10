@@ -95,7 +95,7 @@ function scr_save_chapter(chapter_id) {
         mucranoid: mucranoid,
     };
     chap.battle_cry = battle_cry;
-    chap.squad_distribution = squad_distribution;
+    chap.equal_specialists = equal_specialists;
     chap.load_to_ships = {
         escort_load: load_to_ships[0],
         split_scouts: load_to_ships[1],

@@ -191,7 +191,7 @@ function scr_librarium() {
         draw_set_color(c_gray);
         draw_set_font(fnt_40k_30b);
         draw_text_transformed(xx + 336 + 16, yy + 66, "Librarium", 1, 1, 0);
-        draw_text_transformed(xx + 336 + 16, yy + 100, string_hash_to_newline("Chief " + string(obj_ini.role[100][17]) + " " + string(obj_ini.name[0][4])), 0.6, 0.6, 0);
+        draw_text_transformed(xx + 336 + 16, yy + 100, string_hash_to_newline("Chief " + string(obj_ini.role[100][17]) + " " + string(head_name("Chief " + string(obj_ini.role[100][17])))), 0.6, 0.6, 0);
         draw_set_font(fnt_40k_14);
     }
     if (menu_adept == 1) {

@@ -7,7 +7,7 @@ try {
     var _list_term_armour = global.list_terminator_armour;
 
     if (engage == true) {
-        for (var co = 0; co <= obj_ini.companies; co++) {
+        for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
             if (role_number[co] > 0) {
                 for (var i = 0; i < array_length(obj_ini.role[co]); i++) {
                     if (obj_ini.role[co][i] == obj_ini.role[100][role]) {
@@ -98,7 +98,7 @@ try {
     if ((refresh == true) && (obj_controller.settings > 0)) {
         total_role_number = 0;
         total_roles = "";
-        for (var i = 0; i < 11; i++) {
+        for (var i = 0; i < STORAGE_GROUP_COUNT; i++) {
             role_number[i] = 0;
         }
 
@@ -132,7 +132,7 @@ try {
         req_gear = obj_ini.gear[100][role];
         req_mobi = obj_ini.mobi[100][role];
 
-        for (var co = 0; co < 11; co++) {
+        for (var co = 0; co < STORAGE_GROUP_COUNT; co++) {
             for (var i = 0; i < array_length(obj_ini.role[co]); i++) {
                 if (obj_ini.role[co][i] == obj_ini.role[100][role]) {
                     role_number[co] += 1;
@@ -238,7 +238,7 @@ try {
 
         total_role_number = 0;
 
-        for (var i = 0; i < 11; i++) {
+        for (var i = 0; i < STORAGE_GROUP_COUNT; i++) {
             if (role_number[i] > 0) {
                 req_wep1_num += role_number[i];
                 req_wep2_num += role_number[i];
@@ -252,9 +252,8 @@ try {
         if (total_role_number > 0) {
             var _role_name = obj_ini.role[100][role];
             total_roles = $"You currently have {total_role_number}x {_role_name} across all companies.";
-            for (var i = 0; i < 11; i++) {
-                var romanNumerals = scr_roman_numerals();
-                var _company_name = i == 0 ? "HQ" : $"{romanNumerals[i - 1]} Company";
+            for (var i = 0; i < STORAGE_GROUP_COUNT; i++) {
+                var _company_name = group_display_name(i);
 
                 if (role_number[i] > 0) {
                     total_roles += $" {_company_name}: {role_number[i]};";

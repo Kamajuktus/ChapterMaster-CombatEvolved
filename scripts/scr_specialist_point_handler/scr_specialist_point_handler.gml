@@ -139,7 +139,15 @@ function SpecialistPointHandler() constructor {
                 if (_count > 1) {
                     setup_new_forge_master_popup(techs);
                 } else if (_count == 1) {
-                    _tech_units[0].update_role("Forge Master");
+                    var _new_fm = _tech_units[0];
+                    _new_fm.update_role("Forge Master");
+                    // Keep the Forge Master in the Armoury institution, not a line company.
+                    if (_new_fm.company != GROUP_ARMOURY) {
+                        var _arm_slot = find_company_open_slot(GROUP_ARMOURY);
+                        if (_arm_slot != -1) {
+                            scr_move_unit_info(_new_fm.company, GROUP_ARMOURY, _new_fm.marine_number, _arm_slot);
+                        }
+                    }
                 }
             }
 

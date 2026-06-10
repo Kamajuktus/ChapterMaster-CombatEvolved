@@ -1,4 +1,8 @@
 function scr_civil_roster(_unit_location, _target_location, _is_planet) {
+    // Outdated column combat is disabled; no civilian columns to populate.
+    if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+        return;
+    }
     // Determines who all will be present for the battle
     // Only used on the Chaos Space Marines(?) meeting battle (not sure if its implemented)
 

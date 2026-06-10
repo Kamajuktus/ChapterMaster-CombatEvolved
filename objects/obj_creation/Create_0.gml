@@ -199,7 +199,7 @@ lordexec = global.name_generator.ChapterMemberNameGeneration(); //8th
 relmaster = global.name_generator.ChapterMemberNameGeneration(); //9th
 recruiter = global.name_generator.ChapterMemberNameGeneration(); //10th
 
-squad_distribution = 0;
+equal_specialists = 0;
 load_to_ships = [
     2,
     0,
@@ -595,5 +595,5 @@ weapon_colour_replace = [
     col_b[weapon_color] / 255
 ];
 /* */
-alarm_set(1, 30);
+action_set_alarm(30, 1);
 /*  */

@@ -300,7 +300,7 @@ try {
         }
     }
     var p = 0, penitorium = 0, unit;
-    for (var c = 0; c < 11; c++) {
+    for (var c = 0; c < STORAGE_GROUP_COUNT; c++) {
         for (var e = 0; e < array_length(obj_ini.god[c]); e++) {
             if (obj_ini.god[c][e] == 10) {
                 unit = fetch_unit([c, e]);
@@ -667,7 +667,6 @@ try {
             set_new_player_fleet_course(complex_route);
         }
     }
-    location_viewer.update_fleet_table();
 } catch (_exception) {
     ERROR_HANDLER.handle_exception(_exception);
 }

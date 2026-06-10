@@ -42,7 +42,7 @@ function scr_destroy_planet(destruction_method) {
 
     // No survivors!
     var unit;
-    for (var cah = 0; cah <= obj_ini.companies; cah++) {
+    for (var cah = 0; cah <= STORAGE_GROUP_MAX; cah++) {
         for (var ed = 0; ed < array_length(obj_ini.role[cah]); ed++) {
             unit = fetch_unit([cah, ed]);
             if ((unit.location_string == you.name) && (unit.planet_location == baid)) {

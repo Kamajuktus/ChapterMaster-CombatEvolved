@@ -2,7 +2,7 @@
 function scr_menu_clear_up(specific_area_function) {
     var spec_func = specific_area_function;
     with (obj_controller) {
-        var menu_action_allowed = !instance_exists(obj_saveload) && !instance_exists(obj_drop_select) && !instance_exists(obj_popup_dialogue) && !instance_exists(obj_ncombat);
+        var menu_action_allowed = action_if_number(obj_saveload, 0, 0) && action_if_number(obj_drop_select, 0, 0) && action_if_number(obj_popup_dialogue, 0, 0) && action_if_number(obj_ncombat, 0, 0);
 
         if (menu_action_allowed) {
             if (combat != 0) {
@@ -161,6 +161,7 @@ function init_manage_buttons() {
         bio_toggle: new UnitButtonObject({style: "pixel", label: "Show Bio", tooltip: "Click here or press B to Toggle Unit Biography."}),
         capture_image: new UnitButtonObject({style: "pixel", label: "Capture Image", tooltip: "Click to create a local png of the given marine in the game folder."}),
         company_namer: new TextBarArea(800, 98, 600, false),
+        squad_namer: new TextBarArea(800, 98, 400, false),
     };
 }
 
@@ -184,15 +185,8 @@ function scr_toggle_setting() {
                 popup = 0;
                 selected = 0;
                 hide_banner = 1;
-                try{
-                    setup_ui_chapter_settings();
-                } catch (_exception){
-                    handle_exception(_exception);
-                    scr_toggle_setting();
-                }
             } else if (settings) {
                 menu = eMENU.SETTINGS;
-                setup_ui_chapter_settings();
                 cooldown = 8000;
                 click = 1;
                 settings = 0;
@@ -235,7 +229,7 @@ function scr_toggle_reclu() {
 
                 // Get list of jailed marines
                 var p = 0;
-                for (var c = 0; c < 11; c++) {
+                for (var c = 0; c < STORAGE_GROUP_COUNT; c++) {
                     for (var e = 0; e < array_length(obj_ini.god[c]); e++) {
                         if (obj_ini.god[c][e] == 10) {
                             p += 1;
@@ -464,6 +458,15 @@ function scr_end_turn() {
                     audio_play_sound(snd_end_turn, -50, false);
 
                     turn += 1;
+
+                    // Resolve persistent slot-based ground battles for the turn that just ended.
+                    if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+                        resolve_all_ground_battles();
+                        marines_suppress_cult_influence(); // marines erode genestealer cult influence
+                        squad_up_loose_marines();
+                        refresh_all_command_points(); // recompute maxima and refill for next turn
+                    }
+
                     with (obj_star) {
                         for (var i = 0; i <= 21; i++) {
                             present_fleet[i] = 0;

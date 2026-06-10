@@ -25,6 +25,7 @@ if (menu == eMENU.DIPLOMACY) {
     }
 }
 try {
+    scr_ui_settings();
     scr_ui_popup();
 } catch (_exception) {
     ERROR_HANDLER.handle_exception(_exception);

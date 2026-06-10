@@ -14,7 +14,7 @@ function scr_ship_occupants(target_ship_id) {
     }
 
     i = 0;
-    for (co = 0; co <= 10; co++) {
+    for (co = 0; co <= STORAGE_GROUP_MAX; co++) {
         i = 0;
         repeat (500) {
             i += 1;
@@ -45,7 +45,7 @@ function scr_ship_occupants(target_ship_id) {
     }
     i = 0;
     co = -1;
-    for (co = 0; co <= 10; co++) {
+    for (co = 0; co <= STORAGE_GROUP_MAX; co++) {
         i = 0;
         repeat (100) {
             i += 1;

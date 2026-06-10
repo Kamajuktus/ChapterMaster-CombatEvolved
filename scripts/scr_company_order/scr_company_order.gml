@@ -1,6 +1,6 @@
 function sort_all_companies() {
     with (obj_ini) {
-        for (var i = 0; i <= obj_ini.companies; i++) {
+        for (var i = 0; i <= STORAGE_GROUP_MAX; i++) {
             scr_company_order(i);
         }
     }

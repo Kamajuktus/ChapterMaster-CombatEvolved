@@ -127,7 +127,7 @@ function UnitQuickFindPanel() constructor {
             garrison_log = {};
             obj_controller.specialist_point_handler.calculate_research_points(false);
             ship_count = array_length(obj_ini.ship_carrying);
-            for (var co = 0; co <= obj_ini.companies; co++) {
+            for (var co = 0; co <= STORAGE_GROUP_MAX; co++) {
                 for (var u = 0; u < array_length(obj_ini.TTRPG[co]); u++) {
                     /// @type {Struct.TTRPG_stats}
                     _unit = fetch_unit([co, u]);
@@ -211,9 +211,10 @@ function UnitQuickFindPanel() constructor {
         var xx = main_panel.XX;
         var yy = main_panel.YY;
 
-        if (fleet_table.row_count() != instance_number(obj_p_fleet)) {
-            update_fleet_table();
-        }
+        // Rebuild every draw so each fleet's location string stays current -- a fleet that
+        // finishes its warp jump (action "move" -> "") must stop showing "Warp Travel" even
+        // though the fleet count hasn't changed.
+        update_fleet_table();
 
         fleet_table.update({x1: xx + 40, y1: yy + 50, y2: yy + 50 + main_panel.height, colour: c_white, font: fnt_40k_14});
 
@@ -598,12 +599,9 @@ function update_garrison_manage() {
 function update_general_manage_view() {
     with (obj_controller) {
         if (managing > 0) {
-            if ((managing <= 10) && (managing != 0)) {
-                scr_company_view(managing);
-            }
-            if ((managing > 10) || (managing == 0)) {
-                scr_special_view(managing);
-            }
+            // Line companies (1-10) and the institution/HQ view codes (11-15) are now all real
+            // storage groups; manage_to_storage() maps the view code to its storage index.
+            scr_company_view(manage_to_storage(managing));
             new_company_struct();
             cooldown = 10;
             sel_loading = -1;
@@ -653,8 +651,6 @@ function add_bionics_selection() {
         }
 
         _unit.add_bionics();
-        ma_health[i] = _unit.hp();
-        ma_health_string[i] = $"{round((_unit.hp() / _unit.max_health()) * 100)}% HP";
     }
 }
 
@@ -753,7 +749,7 @@ function add_tag_to_selection(new_tag) {
 
 /// @self Asset.GMObject.obj_controller
 function promote_selection() {
-    if ((sel_promoting == 1) && (!instance_exists(obj_popup))) {
+    if ((sel_promoting == 1) && (instance_number(obj_popup) == 0)) {
         var pip = instance_create(0, 0, obj_popup);
         pip.type = 5;
         pip.company = managing;

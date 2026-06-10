@@ -15,54 +15,39 @@ function scr_management(argument0) {
         }
 
         var pane;
-        var _command_company = collect_company(0);
 
+        // Each institution is its own storage group now, so a panel simply lists that group's
+        // members (its master + free specialists) -- no by-role aggregation across companies.
         pane = instance_create(475, 180 - 48, obj_managment_panel);
-        pane.company = 0;
+        pane.company = GROUP_RECLUSIUM;
         pane.manage = 14;
         pane.header = 2;
         pane.title = "RECLUSIUM";
-
-        var _reclusium_units = _command_company.get_from({group: [SPECIALISTS_CHAPLAINS, true, true]}, true, true);
-
-        var _reclusium_units = _reclusium_units.index_roles();
-
+        var _reclusium_units = collect_company(GROUP_RECLUSIUM).index_roles();
         pane.line = array_join(pane.line, _reclusium_units.create_plural_strings_array());
 
         pane = instance_create(275, 180 - 48, obj_managment_panel);
-        pane.company = 0;
+        pane.company = GROUP_APOTHECARIUM;
         pane.manage = 12;
         pane.header = 2;
         pane.title = "APOTHECARIUM";
-
-        var _apothecary_units = _command_company.get_from({group: [SPECIALISTS_APOTHECARIES, true, true]}, true, true);
-
-        var _apothecary_units = _apothecary_units.index_roles();
-
+        var _apothecary_units = collect_company(GROUP_APOTHECARIUM).index_roles();
         pane.line = array_join(pane.line, _apothecary_units.create_plural_strings_array());
 
         pane = instance_create(925, 180 - 48, obj_managment_panel);
-        pane.company = 0;
+        pane.company = GROUP_ARMOURY;
         pane.manage = 15;
         pane.header = 2;
         pane.title = "ARMOURY";
-        var _armoury_units = _command_company.get_from({group: [SPECIALISTS_TECHS, true, true]}, true, true);
-
-        var _armoury_units = _armoury_units.index_roles();
-
+        var _armoury_units = collect_company(GROUP_ARMOURY).index_roles();
         pane.line = array_join(pane.line, _armoury_units.create_plural_strings_array());
 
-        pane = instance_create(925, 180 - 48, obj_managment_panel);
         pane = instance_create(1125, 180 - 48, obj_managment_panel);
-        pane.company = 0;
+        pane.company = GROUP_LIBRARIUM;
         pane.manage = 13;
         pane.header = 2;
         pane.title = "LIBRARIUM";
-
-        var _lib_units = _command_company.get_from({group: [SPECIALISTS_LIBRARIANS, true, true]}, true, true);
-
-        var _lib_units = _lib_units.index_roles();
-
+        var _lib_units = collect_company(GROUP_LIBRARIUM).index_roles();
         pane.line = array_join(pane.line, _lib_units.create_plural_strings_array());
 
         pane = instance_create(700, 180 - 48, obj_managment_panel);
@@ -70,9 +55,7 @@ function scr_management(argument0) {
         pane.manage = 11;
         pane.header = 3;
         pane.title = "HEADQUARTERS";
-
-        var _command_units = _command_company.index_roles();
-
+        var _command_units = collect_company(0).index_roles();
         pane.line = array_join(pane.line, _command_units.create_plural_strings_array());
 
         // Coordinates declaration and text initiation

@@ -55,7 +55,7 @@ if (did) {
         }
     }
     if ((obj_ini.veh_loc[1][1] == "random") || (obj_ini.veh_loc[1][1] == "Random")) {
-        for (var coh = 0; coh < 11; coh++) {
+        for (var coh = 0; coh < STORAGE_GROUP_COUNT; coh++) {
             for (var iy = 1; iy <= 60; iy++) {
                 obj_ini.veh_loc[coh][iy] = _current_system.name;
             }

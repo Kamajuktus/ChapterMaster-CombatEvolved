@@ -28,6 +28,7 @@ storm_image = 0;
 trader = 0;
 visited = 0;
 stored_owner = -1;
+star_surface = 0;
 
 // sets up default planet variables
 var _planet_array_size = 9;
@@ -65,6 +66,13 @@ p_heresy_secret = array_create(_planet_array_size, 0);
 p_raided = array_create(_planet_array_size, 0);
 p_governor = array_create(_planet_array_size, "");
 p_operatives = array_create_advanced(_planet_array_size, []);
+// Per-planet persistent ground battle state; 0 = no active battle, else a BattleState struct
+p_battle = array_create(_planet_array_size, 0);
+// Per-planet fixed terrain for each battle place (generated once, persists all game).
+p_place_terrain = array_create_advanced(_planet_array_size, []);
+// Per-planet command points: current pool spent on squad assignment/moves, and its turn max.
+p_command_points = array_create(_planet_array_size, 5);
+p_command_max = array_create(_planet_array_size, 5);
 p_feature = array_create_advanced(_planet_array_size, []);
 p_upgrades = array_create_advanced(_planet_array_size, []);
 p_influence = array_create_advanced(_planet_array_size, array_create(15, 0));
@@ -123,6 +131,10 @@ serialize = function() {
             var var_name = var_names[n];
             if (string_starts_with(var_name, "p_")) {
                 var val = object_star[$ var_name][p];
+                // BattleState holds methods, so store its plain-data form for json saving.
+                if (var_name == "p_battle" && is_struct(val)) {
+                    val = val.serialize();
+                }
                 variable_struct_set(planet_data[p], var_name, val);
             }
         }
@@ -203,6 +215,16 @@ function deserialize(save_data) {
                         _new_feat.load_json_data(_feat);
 
                         array_push(self.p_feature[p], _new_feat);
+                    }
+                    continue;
+                }
+
+                if (var_name == "p_battle") {
+                    var _bdat = planet[$ var_name];
+                    if (is_struct(_bdat) && struct_exists(_bdat, "places")) {
+                        self.p_battle[p] = battle_state_from_data(self, p, _bdat);
+                    } else {
+                        self.p_battle[p] = 0;
                     }
                     continue;
                 }

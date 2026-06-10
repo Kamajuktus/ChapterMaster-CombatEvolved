@@ -98,7 +98,7 @@ ship_lost = [];
 
 // Vehicle Init
 
-var _max_companies = 11;
+var _max_companies = STORAGE_GROUP_COUNT; // 0..10 line/HQ + 11..14 institutions
 var _max_vehicles = 205;
 
 last_ship = array_create_2d(_max_companies, _max_vehicles, {uid: "", name: ""});
@@ -110,6 +110,8 @@ veh_pilots = array_create_2d(_max_companies, _max_vehicles, 0);
 veh_lid = array_create_2d(_max_companies, _max_vehicles, -1);
 veh_wid = array_create_2d(_max_companies, _max_vehicles, 2);
 veh_uid = array_create_2d(_max_companies, _max_vehicles, 0);
+// uid of the squad this vehicle is assigned to ("" = unassigned). Survives vehicle reordering.
+veh_squad = array_create_2d(_max_companies, _max_vehicles, "");
 
 veh_loc = array_create_2d(_max_companies, _max_vehicles, "");
 veh_name = array_create_2d(_max_companies, _max_vehicles, "");
@@ -197,7 +199,7 @@ serialize = function() {
     var object_ini = self;
 
     var _marines = array_create(0);
-    for (var _coy = 0; _coy <= 10; _coy++) {
+    for (var _coy = 0; _coy <= STORAGE_GROUP_MAX; _coy++) {
         for (var _mar = 0; _mar <= 500; _mar++) {
             var _marine_json;
             if (obj_ini.name[_coy][_mar] != "") {
@@ -237,6 +239,12 @@ serialize = function() {
         save_data.last_ship = object_ini.last_ship;
     }
 
+    // ChapterGameData (suspicion + trait-derived modifiers) is a struct with methods, so save its
+    // plain-data form explicitly (deserialize rebuilds it via new ChapterGameData()).
+    if (struct_exists(object_ini, "chapter_data") && is_struct(object_ini.chapter_data)) {
+        save_data.chapter_data = object_ini.chapter_data.serialize();
+    }
+
     var excluded_from_save = [
         "temp",
         "serialize",
@@ -248,7 +256,9 @@ serialize = function() {
         "squad_structs",
         "squad_types",
         "marines",
-        "last_ship"
+        "last_ship",
+        "chapter_data",            // saved explicitly above
+        "chapter_squad_arrangement" // static template, reloaded from JSON on deserialize
     ];
 
     copy_serializable_fields(object_ini, save_data, excluded_from_save);
@@ -322,8 +332,8 @@ deserialize = function(save_data) {
         obj_ini.TTRPG[company][marine].load_json_data(struct);
     }
 
-    obj_ini.TTRPG = array_create(11, array_create(501, []));
-    for (var _coy = 0; _coy < 11; _coy++) {
+    obj_ini.TTRPG = array_create(STORAGE_GROUP_COUNT, array_create(501, []));
+    for (var _coy = 0; _coy < STORAGE_GROUP_COUNT; _coy++) {
         for (var _mar = 0; _mar <= 500; _mar++) {
             obj_ini.TTRPG[_coy][_mar] = new TTRPG_stats("chapter", _coy, _mar, "blank");
         }

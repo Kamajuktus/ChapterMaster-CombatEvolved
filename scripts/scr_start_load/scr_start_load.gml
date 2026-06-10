@@ -262,6 +262,31 @@ function scr_start_load(fleet, load_from_star, load_options) {
             }
         }
     }
+    // Institution specialists (Apothecarium / Librarium / Reclusium / Armoury) also embark when
+    // the chapter loads onto its fleet. They have no company cohesion to preserve, so they simply
+    // fill any ship with room (respecting the "capitals only" escort setting).
+    var _inst_groups = [GROUP_APOTHECARIUM, GROUP_LIBRARIUM, GROUP_RECLUSIUM, GROUP_ARMOURY];
+    for (var _ig = 0; _ig < array_length(_inst_groups); _ig++) {
+        var _gi = _inst_groups[_ig];
+        var _glen = array_length(obj_ini.role[_gi]);
+        for (var _su = 0; _su < _glen; _su++) {
+            var _spec = fetch_unit([_gi, _su]);
+            if (!is_struct(_spec) || _spec.name() == "" || _spec.ship_location > -1) {
+                continue;
+            }
+            var _ssize = _spec.get_unit_size();
+            for (var _sh = 1; _sh < array_length(obj_ini.ship_carrying); _sh++) {
+                if ((escort_load == 2) && (obj_ini.ship_capacity[_sh] < 250)) {
+                    continue;
+                }
+                if ((obj_ini.ship_carrying[_sh] + _ssize) <= obj_ini.ship_capacity[_sh]) {
+                    _spec.load_marine(_sh);
+                    break;
+                }
+            }
+        }
+    }
+
     if (_splintered) {
         var _imperial_stars = scr_get_stars(true, [eFACTION.IMPERIUM]);
         var _empty_ships = [];

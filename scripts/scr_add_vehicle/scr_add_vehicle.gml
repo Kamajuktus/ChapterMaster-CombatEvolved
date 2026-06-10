@@ -152,6 +152,7 @@ function destroy_vehicle(co, num) {
         obj_ini.veh_pilots[co][num] = 0;
         obj_ini.veh_lid[co][num] = -1;
         obj_ini.veh_wid[co][num] = 0;
+        obj_ini.veh_squad[co][num] = "";
     } catch (_exception) {
         LOGGER.critical($"Company: {co}, Index: {num}");
         ERROR_HANDLER.handle_exception(_exception);
