@@ -1,4 +1,19 @@
 {
+  "lone_squad": {
+    "type_data": {
+      "display_data": "Detachment",
+      "formation_options": [
+        "command",
+        "veteran",
+        "terminator",
+        "assault",
+        "devastator",
+        "scout",
+        "tactical"
+      ],
+      "base": "tactical"
+    }
+  },
   "command_squad": {
     "Captain": {
       "max": 1,

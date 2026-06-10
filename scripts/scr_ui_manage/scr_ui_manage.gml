@@ -660,7 +660,9 @@ function draw_sprite_and_unit_equip_data() {
             if (view_squad && company_data.has_squads) {
                 if (company_data.current_squad != -1) {
                     var cur_squad = company_data.grab_current_squad();
-                    var sgt_possible = cur_squad.type != "command_squad" && !selected_unit.IsSpecialist(SPECIALISTS_SQUAD_LEADERS);
+                    // command_squad has no sergeant; lone_squad (ad-hoc single-unit detachments for
+                    // masters/specialists/dreadnoughts) must never demote its member to a sergeant.
+                    var sgt_possible = cur_squad.type != "command_squad" && cur_squad.type != "lone_squad" && !selected_unit.IsSpecialist(SPECIALISTS_SQUAD_LEADERS);
                     if (selected_unit != cur_squad.squad_leader) {
                         if (point_and_click(draw_unit_buttons([xx + 200 + 50, yy + 329], "Make Sgt", [1, 1], #50a076,,, sgt_possible ? 1 : 0.5)) && sgt_possible) {
                             cur_squad.change_sgt(selected_unit);
@@ -1128,10 +1130,9 @@ function scr_ui_manage() {
 
                 with (obj_controller) {
                     if (view_squad && !instance_exists(obj_popup)) {
-                        if (managing > 10) {
-                            view_squad = false;
-                            unit_profile = false;
-                        } else if (company_data.has_squads) {
+                        // Special command-staff views (managing 11..15) now support Squad View too,
+                        // so they go through the same draw path as line companies.
+                        if (company_data.has_squads) {
                             unit_profile = true;
                             try {
                                 company_data.draw_squad_view();
@@ -1140,6 +1141,9 @@ function scr_ui_manage() {
                                 obj_controller.view_squad = false;
                                 obj_controller.unit_profile = false;
                             }
+                        } else {
+                            view_squad = false;
+                            unit_profile = false;
                         }
                     }
                 }

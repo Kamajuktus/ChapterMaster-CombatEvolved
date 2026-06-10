@@ -43,7 +43,12 @@ function CompanyStruct(comp) constructor {
     static squad_search = function() {
         var _squads = obj_ini.squads;
         //array_copy(_squads, 0, obj_ini.squads, 0, array_length(obj_ini.squads));
-        if (company >= 0) {
+        // Real line companies (0..10) gather their own squads by base_company. The special
+        // command-staff views (11..15: HQ/Apothecarion/Librarium/Reclusium/Armamentarium) and the
+        // ad-hoc quick-find view (-1) are virtual role aggregations, so they gather squads from the
+        // units currently shown (display_unit) instead -- this is what lets the Squad View button
+        // work for masters, free specialists and any other command-staff marine.
+        if (company >= 0 && company <= 10) {
             company_squads = [];
             var _search_squad;
             var _squad_ids = get_squad_ids();
@@ -57,7 +62,7 @@ function CompanyStruct(comp) constructor {
                     array_push(company_squads, _search_squad);
                 }
             }
-        } else if (company == -1) {
+        } else if (company == -1 || company > 10) {
             var _squad_ids = [];
             var _disp_units = obj_controller.display_unit;
             for (var i = 0; i < array_length(_disp_units); i++) {
@@ -441,7 +446,7 @@ function CompanyStruct(comp) constructor {
         }
 
         var _find_squad_member = false;
-        if (selected_unit.company == company || company == -1) {
+        if (selected_unit.company == company || company == -1 || company > 10) {
             var _current = grab_current_squad();
             if (_current.uid != selected_unit.squad) {
                 var squad_found = false;

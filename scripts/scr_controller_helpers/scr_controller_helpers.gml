@@ -467,6 +467,7 @@ function scr_end_turn() {
 
                     // Resolve persistent slot-based ground battles for the turn that just ended.
                     if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+                        squad_up_loose_marines(); // keep new/promoted/returned marines squad-organised
                         resolve_all_ground_battles();
                         marines_suppress_cult_influence(); // marines erode genestealer cult influence
                         refresh_all_command_points(); // recompute maxima and refill for next turn

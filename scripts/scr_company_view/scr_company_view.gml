@@ -474,7 +474,8 @@ function switch_view_company(new_view) {
             }
         }
         if (new_view > 10) {
-            view_squad = false;
+            // Special command-staff views keep their role-aggregated company layout, but Squad
+            // View is now allowed here too (handled via display_unit aggregation in CompanyStruct).
             scr_special_view(new_view);
         } else {
             with (obj_ini) {

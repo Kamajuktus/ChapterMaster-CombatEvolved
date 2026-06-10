@@ -1145,6 +1145,42 @@ function game_start_squads() {
             _company.organise_by_template(_comp_datas[i]);
         }
     }
+    // Everyone left out of a templated squad (HQ, masters, free specialists, dreadnoughts, and
+    // any leftover line trooper) still needs a squad so they can deploy in slot ground battles.
+    squad_up_loose_marines();
+}
+
+// Forms a one-member "Detachment" (lone_squad) for a single unit that belongs to no squad. Uses
+// the permissive lone_squad type (no role requirements) so a master, specialist or dreadnought is
+// a valid, deployable, save-able squad. Returns the new squad uid (or "none" if not applicable).
+function form_lone_squad_for(unit) {
+    if (!is_struct(unit) || unit.name() == "" || unit.base_group == "none" || unit.squad != "none") {
+        return "none";
+    }
+    var _sq = new UnitSquad("lone_squad", unit.company);
+    obj_ini.squads[$ _sq.uid] = _sq;   // register before add_to_squad (which fetches the squad)
+    unit.add_to_squad(_sq.uid);
+    _sq.base_company = unit.company;
+    return _sq.uid;
+}
+
+// Sweeps every chapter member across all companies (incl. HQ company 0) and gives a lone squad to
+// anyone not already in one -- masters, specialists, dreadnoughts and honour guard included -- so
+// the entire chapter is squad-organised and therefore deployable in slot combat.
+function squad_up_loose_marines() {
+    for (var comp = 0; comp <= obj_ini.companies; comp++) {
+        var _slots = array_length(obj_ini.TTRPG[comp]);
+        for (var num = 0; num < _slots; num++) {
+            var _u = fetch_unit([comp, num]);
+            if (!is_struct(_u) || _u.name() == "" || _u.base_group == "none") {
+                continue;
+            }
+            if (_u.squad != "none") {
+                continue;
+            }
+            form_lone_squad_for(_u);
+        }
+    }
 }
 
 function set_member_loc(loc_data) {
