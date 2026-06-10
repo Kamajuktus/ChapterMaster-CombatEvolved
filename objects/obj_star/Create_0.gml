@@ -45,6 +45,7 @@ p_pdf = array_create(_planet_array_size, 0);
 p_fortified = array_create(_planet_array_size, 0);
 p_station = array_create(_planet_array_size, 0);
 p_player = array_create(_planet_array_size, 0);
+p_battle = array_create(_planet_array_size, 0); // per-planet slot-based ground battle (BattleState or 0)
 p_lasers = array_create(_planet_array_size, 0);
 p_silo = array_create(_planet_array_size, 0);
 p_defenses = array_create(_planet_array_size, 0);
@@ -123,6 +124,10 @@ serialize = function() {
             var var_name = var_names[n];
             if (string_starts_with(var_name, "p_")) {
                 var val = object_star[$ var_name][p];
+                // BattleState holds methods, so store its plain-data form for json saving.
+                if (var_name == "p_battle" && is_struct(val)) {
+                    val = val.serialize();
+                }
                 variable_struct_set(planet_data[p], var_name, val);
             }
         }
@@ -206,6 +211,17 @@ function deserialize(save_data) {
                     }
                     continue;
                 }
+
+                if (var_name == "p_battle") {
+                    var _bdat = planet[$ var_name];
+                    if (is_struct(_bdat) && struct_exists(_bdat, "places")) {
+                        self.p_battle[p] = battle_state_from_data(self, p, _bdat);
+                    } else {
+                        self.p_battle[p] = 0;
+                    }
+                    continue;
+                }
+
                 var val = planet[$ var_name];
                 // var_name = "p_type"
                 // planet = {"p_type":"hive"};

@@ -1,3 +1,7 @@
+if (column_combat_disabled) {
+    exit;
+}
+
 if (!instance_exists(obj_popup)) {
     if (cd < 1) {
         if (click_stall_timer < 1) {

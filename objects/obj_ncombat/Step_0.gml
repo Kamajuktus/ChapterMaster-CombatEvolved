@@ -1,3 +1,8 @@
+if (column_combat_disabled) {
+    instance_destroy(); // remove the inert shell created by a now-disabled column battle event
+    exit;
+}
+
 if (fadein > -30) {
     fadein -= 1;
 }

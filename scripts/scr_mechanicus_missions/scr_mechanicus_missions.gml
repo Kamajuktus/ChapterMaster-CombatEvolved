@@ -42,8 +42,8 @@ function mechanicus_missions_end_turn(planet) {
                 battli = 2;
             } // very oops, much necron, wow
 
-            if ((battli > 0) && (p_player[planet] > 0)) {
-                // Quene the battle
+            if ((battli > 0) && (p_player[planet] > 0) && !(variable_global_exists("slot_battle_mode") && global.slot_battle_mode)) {
+                // Quene the battle (skipped while column combat is disabled)
                 obj_turn_end.battles += 1;
                 obj_turn_end.battle[obj_turn_end.battles] = 1;
                 obj_turn_end.battle_world[obj_turn_end.battles] = planet;

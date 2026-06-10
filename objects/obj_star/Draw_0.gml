@@ -101,5 +101,37 @@ if (global.load == -1 && (obj_controller.zoomed || in_camera_view(star_box_shape
     }
     var _sprite = ds_map_find_value(global.star_sprites, name);
     draw_sprite_ext(_sprite, 0, x - (64 * scale), y, scale, scale, 1, c_white, 1);
+
+    // Active-battle indicators, drawn live under the system name tag (not baked into the cached
+    // name sprite, because the counts change every turn): a battle count, and per battle the
+    // planet, the marine-vs-enemy headcount, and objective-control progress.
+    var _battles = system_battle_summaries(self);
+    if (array_length(_battles) > 0) {
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_top);
+        draw_set_font(fnt_cul_14);
+        var _ty = y + (64 * scale);
+        var _lh = (string_height("Ag") + 2) * scale;
+
+        draw_set_color(c_red);
+        var _hdr = (array_length(_battles) == 1) ? "1 Active Battle" : $"{array_length(_battles)} Active Battles";
+        draw_text_transformed(x, _ty, _hdr, scale, scale, 0);
+        _ty += _lh + 1 * scale;
+
+        for (var _b = 0; _b < array_length(_battles); _b++) {
+            var _bi = _battles[_b];
+            draw_set_color(c_yellow);
+            draw_text_transformed(x, _ty, _bi.planet_name, scale, scale, 0);
+            _ty += _lh;
+            draw_set_color(c_white);
+            draw_text_transformed(x, _ty, $"Marines {_bi.marines}  vs  Enemies {_bi.enemies}", scale, scale, 0);
+            _ty += _lh;
+            draw_set_color(_bi.objective_turns > 0 ? c_lime : c_gray);
+            draw_text_transformed(x, _ty, $"Objective {_bi.objective_turns}/{_bi.objective_win} turns", scale, scale, 0);
+            _ty += _lh + 2 * scale;
+        }
+        draw_set_color(c_white);
+        draw_set_halign(fa_center);
+    }
 }
 draw_set_valign(fa_top);

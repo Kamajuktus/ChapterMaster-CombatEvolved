@@ -1,3 +1,7 @@
+if (column_combat_disabled) {
+    exit;
+}
+
 draw_sprite(spr_rock_bg, 0, 0, 0);
 
 draw_set_color(c_black);

@@ -464,6 +464,14 @@ function scr_end_turn() {
                     audio_play_sound(snd_end_turn, -50, false);
 
                     turn += 1;
+
+                    // Resolve persistent slot-based ground battles for the turn that just ended.
+                    if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+                        resolve_all_ground_battles();
+                        marines_suppress_cult_influence(); // marines erode genestealer cult influence
+                        refresh_all_command_points(); // recompute maxima and refill for next turn
+                    }
+
                     with (obj_star) {
                         for (var i = 0; i <= 21; i++) {
                             present_fleet[i] = 0;

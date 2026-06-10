@@ -353,6 +353,10 @@ function Roster() constructor {
     };
 
     static add_to_battle = function() {
+        // Outdated column combat is disabled; nothing to populate.
+        if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+            return;
+        }
         var meeting = false;
         if (instance_exists(obj_temp_meeting)) {
             meeting = true;
@@ -474,6 +478,10 @@ function PurgeButton(purge_image, xx, yy, purge_type) constructor {
 }
 
 function setup_battle_formations() {
+    // Outdated column combat is disabled; skip formation setup.
+    if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+        return;
+    }
     // Formation here
     var new_combat = obj_ncombat;
     obj_controller.bat_devastator_column = obj_controller.bat_deva_for[new_combat.formation_set];

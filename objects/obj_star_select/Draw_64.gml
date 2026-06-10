@@ -170,11 +170,15 @@ try {
                 var is_enemy = false;
             }
 
+            // With the slot-based ground battle active, the legacy "Attack" (column invade) is
+            // suppressed; offer "Battle" instead, which opens the persistent slot battle view.
+            var _slot = variable_global_exists("slot_battle_mode") && global.slot_battle_mode;
+
             if (p_data.planet > 0) {
                 if (target.present_fleet[1] == 0) /* and (target.p_type[obj_controller.selecting_planet]!="Dead")*/ {
                     if (p_data.player_forces > 0) {
                         if (is_enemy) {
-                            button1 = "Attack";
+                            button1 = _slot ? "Battle" : "Attack";
                             if (p_data.population) {
                                 button2 = "Purge";
                             }
@@ -183,7 +187,7 @@ try {
                 }
                 if (target.present_fleet[1] > 0) /* and (target.p_type[obj_controller.selecting_planet]!="Dead")*/ {
                     if (is_enemy) {
-                        button1 = "Attack";
+                        button1 = _slot ? "Battle" : "Attack";
                         button2 = "Raid";
                         button3 = "Bombard";
                     } else {
@@ -240,6 +244,10 @@ try {
                     button3 = "";
                     button4 = "";
                 }
+            }
+            // An in-progress slot battle can always be opened to check on / reinforce it.
+            if (_slot && p_data.planet > 0 && !target.space_hulk && p_data.has_battle()) {
+                button1 = "Battle";
             }
             buttons_selected = true;
         }
@@ -340,6 +348,8 @@ try {
                 with (obj_star_select) {
                     instance_destroy();
                 }
+            } else if (current_button == "Battle") {
+                instance_create_layer(x, y, layer_get_all()[0], obj_battle_view, {target: target, planet: obj_controller.selecting_planet});
             } else if (current_button == "Raid" && instance_nearest(x, y, obj_p_fleet).acted <= 1) {
                 instance_create_layer(x, y, layer_get_all()[0], obj_drop_select, {p_target: target, planet_number: obj_controller.selecting_planet, sh_target: instance_nearest(x, y, obj_p_fleet), purge: 0});
             } else if (current_button == "Attack") {

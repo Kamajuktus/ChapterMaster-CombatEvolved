@@ -79,6 +79,7 @@ is_test_map = false;
 target_navy_number = 5;
 global.sound_playing = 0;
 global.defeat = 0;
+global.slot_battle_mode = true; // slot-based ground battles (scr_battle_place / obj_battle_view) active; legacy column combat suppressed
 tutorial = 0;
 sound_in = 0;
 sound_to = "";

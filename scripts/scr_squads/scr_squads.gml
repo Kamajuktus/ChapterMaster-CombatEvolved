@@ -509,6 +509,18 @@ function UnitSquad(squad_type = undefined, company = 0) constructor {
     };
 
     //this dermine the relative coherency of a squad on the basis that a squad needs to more or less be all together in order ot undertake squad actions
+    // Display name for the slot battle view (and anywhere a one-line squad label is wanted):
+    // a player-set nickname if present, otherwise the squad's type display name.
+    static squad_name = function() {
+        if (nickname != "") {
+            return nickname;
+        }
+        if (variable_struct_exists(self, "display_name") && is_string(display_name) && display_name != "") {
+            return display_name;
+        }
+        return "Squad";
+    };
+
     static squad_loci = function() {
         var member_length = array_length(members);
         var locations = [];
@@ -1160,4 +1172,100 @@ function set_member_loc(loc_data) {
 }
 //finds all the squads linked to a given company
 //TODO coalece lots of these functions to make make a company object
-//maybe then we can have more than 10 companies 
+//maybe then we can have more than 10 companies
+
+// Vehicle slots [company, slot] assigned to a given squad. The slot-based ground battle
+// (scr_battle_place) uses this so a squad's vehicles fight in -- and deploy to -- the place
+// their squad holds. This branch has no squad<->vehicle linkage yet (no obj_ini.veh_squad), so
+// it returns empty: vehicles don't auto-join slot battles. Wire up a veh_squad association and
+// fill this in to let armour fight alongside its squad.
+function squad_vehicle_slots(squad_uid) {
+    return [];
+}
+
+// ── Slot-battle garrison recall helpers (used by obj_battle_view) ─────────────────
+// Clears a squad's garrison assignment: drops its planet operative records and removes it from
+// any in-progress slot battle on every star, so it is no longer "stationed" anywhere.
+function free_squad_from_garrison(squad_uid) {
+    if (squad_uid == "none" || squad_uid == "") {
+        return;
+    }
+    var _sq = fetch_squad(squad_uid);
+    if (is_struct(_sq)) {
+        _sq.assignment = "none";
+    }
+    with (obj_star) {
+        for (var p = 1; p <= planets; p++) {
+            var _ops = p_operatives[p];
+            for (var i = array_length(_ops) - 1; i >= 0; i--) {
+                if (is_struct(_ops[i]) && variable_struct_exists(_ops[i], "type") && _ops[i].type == "squad" && _ops[i].reference == squad_uid) {
+                    array_delete(_ops, i, 1);
+                }
+            }
+            if (is_struct(p_battle[p])) {
+                var _bs = p_battle[p];
+                for (var pl = 0; pl < array_length(_bs.places); pl++) {
+                    _bs.places[pl].remove_marine_squad(squad_uid);
+                }
+            }
+        }
+    }
+}
+
+// Loads every living member of a squad back aboard the ship it last embarked from. Returns the
+// number of marines successfully re-boarded.
+function load_squad_to_ships(system, squad_uid) {
+    var _loaded = 0;
+    var _mems = marine_squad_living_members(squad_uid);
+    for (var m = 0; m < array_length(_mems); m++) {
+        var _u = _mems[m];
+        if (is_struct(_u.last_ship) && variable_struct_exists(_u.last_ship, "uid")) {
+            var _ship_id = array_get_index(obj_ini.ship_uid, _u.last_ship.uid);
+            if (_ship_id >= 0) {
+                _u.load_marine(_ship_id, system);
+                _loaded++;
+            }
+        }
+    }
+    return _loaded;
+}
+
+// Pulls a single squad out of an active battle and back to its ship (costs one command point).
+// Returns false (refunding nothing) if the squad has no ship to escape to or no command points.
+function escape_squad_from_battle(system, planet, squad_uid) {
+    // Need at least one valid ship to escape to, or the command point would be wasted.
+    var _mems = marine_squad_living_members(squad_uid);
+    var _has_ship = false;
+    for (var m = 0; m < array_length(_mems); m++) {
+        var _ls = _mems[m].last_ship;
+        if (is_struct(_ls) && variable_struct_exists(_ls, "uid") && array_get_index(obj_ini.ship_uid, _ls.uid) >= 0) {
+            _has_ship = true;
+            break;
+        }
+    }
+    if (!_has_ship) {
+        return false;
+    }
+    if (!spend_command_point(system, planet, 1)) {
+        return false; // no command points left this turn
+    }
+    free_squad_from_garrison(squad_uid);
+    load_squad_to_ships(system, squad_uid);
+    return true;
+}
+
+// Recalls every un-engaged garrison squad on a planet back to the fleet. Engaged squads must
+// escape individually through the battle screen. Returns how many marines were re-boarded.
+function recall_planet_garrison(system, planet) {
+    var _uids = planet_marine_squad_uids(system, planet);
+    var _recalled = 0;
+    for (var s = 0; s < array_length(_uids); s++) {
+        var _uid = _uids[s];
+        if (squad_is_engaged(_uid)) {
+            continue; // engaged squads escape via the battle screen (costs a command point)
+        }
+        free_squad_from_garrison(_uid);
+        _recalled += load_squad_to_ships(system, _uid);
+    }
+    return _recalled;
+}

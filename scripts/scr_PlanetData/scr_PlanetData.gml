@@ -238,6 +238,88 @@ function PlanetData(planet, system) constructor {
         return _new_val;
     };
 
+    // ── Slot-based ground battle (scr_battle_place) ──────────────────────────────
+    static dominant_enemy_faction = function() {
+        var _candidates = [
+            eFACTION.ELDAR,
+            eFACTION.ORK,
+            eFACTION.TAU,
+            eFACTION.TYRANIDS,
+            eFACTION.HERETICS,
+            eFACTION.CHAOS,
+            eFACTION.NECRONS
+        ];
+        var _best = 0, _best_force = 0;
+        for (var i = 0; i < array_length(_candidates); i++) {
+            var _f = _candidates[i];
+            if (planet_forces[_f] > _best_force) {
+                _best_force = planet_forces[_f];
+                _best = _f;
+            }
+        }
+        return _best;
+    };
+
+    static has_battle = function() {
+        return is_struct(system.p_battle[planet]);
+    };
+
+    static battle_state = function() {
+        return system.p_battle[planet];
+    };
+
+    // Returns the active BattleState, creating one if needed.
+    static start_battle = function(enemy_faction = undefined) {
+        if (!is_struct(system.p_battle[planet])) {
+            system.p_battle[planet] = new BattleState(system, planet);
+        }
+        var _bs = system.p_battle[planet];
+        if (enemy_faction != undefined) {
+            _bs.enemy_faction = enemy_faction;
+        }
+        return _bs;
+    };
+
+    static clear_battle = function() {
+        system.p_battle[planet] = 0;
+    };
+
+    // Converts the scalar enemy force count into EnemySquads spread across the places.
+    // Tops up to the count implied by planet_forces without duplicating existing squads.
+    static materialize_enemies_from_counts = function(faction = undefined) {
+        var _bs = start_battle();
+        if (faction == undefined) {
+            faction = dominant_enemy_faction();
+        }
+        if (faction == 0) {
+            return _bs;
+        }
+        _bs.enemy_faction = faction;
+        var _force = planet_forces[faction];
+        var _wanted = min(_force * ENEMY_SQUADS_PER_FORCE, _bs.max_enemy_slots);
+        for (var i = _bs.total_enemies(); i < _wanted; i++) {
+            // Stronger presence (higher force) fields tougher, higher-tier unit types.
+            if (!_bs.add_enemy_to_least_populated(new EnemySquad(faction, pick_enemy_unit_type(faction, _force)))) {
+                break;
+            }
+        }
+        return _bs;
+    };
+
+    // Writes the surviving enemy squad total back to the scalar force count so the rest of
+    // the strategic AI/economy stays consistent. Clears the battle once no enemies remain.
+    static sync_counts_from_places = function() {
+        if (!has_battle()) {
+            return;
+        }
+        var _bs = battle_state();
+        var _force = ceil(_bs.total_enemies() / ENEMY_SQUADS_PER_FORCE);
+        edit_forces(_bs.enemy_faction, _force);
+        if (_bs.is_over()) {
+            clear_battle();
+        }
+    };
+
     static assasinate_governor = function(assaination_type, discovery_modifier) {
         var randa = roll_dice_chapter(1, 100, "high");
         var randa2 = roll_dice(1, 100);

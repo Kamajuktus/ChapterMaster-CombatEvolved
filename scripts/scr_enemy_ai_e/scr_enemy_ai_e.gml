@@ -591,7 +591,7 @@ function scr_enemy_ai_e() {
                     tixt = "The Spyrer on " + planet_numeral_name(run);
                     tixt += " seems to have vanished, presumably gone into hiding.";
                     scr_popup("Spyrer Rampage", tixt, "spyrer", "");
-                } else if (p_player[run] <= 20) {
+                } else if (p_player[run] <= 20 && !(variable_global_exists("slot_battle_mode") && global.slot_battle_mode)) {
                     obj_turn_end.battles += 1;
                     obj_turn_end.battle[obj_turn_end.battles] = 1;
                     obj_turn_end.battle_world[obj_turn_end.battles] = run;
@@ -605,6 +605,9 @@ function scr_enemy_ai_e() {
             if ((p_player[run] > 0) && has_problem_planet(run, "fallen")) {
                 var chan;
                 chan = choose(1, 2, 3, 4);
+                if (variable_global_exists("slot_battle_mode") && global.slot_battle_mode) {
+                    chan = 3; // column combat disabled: resolve as "no Fallen found" instead of a battle
+                }
                 if (chan <= 2) {
                     obj_turn_end.battles += 1;
                     obj_turn_end.battle[obj_turn_end.battles] = 1;
@@ -692,8 +695,13 @@ function scr_enemy_ai_e() {
                         break;
                 }
 
+                // When slot battles are active, the outdated column ground combat is disabled
+                // entirely: no ground invasion battles are queued. Xeno/heretic invasions are
+                // resolved by the end-of-turn slot resolver instead.
+                var _slot_battles = variable_global_exists("slot_battle_mode") && global.slot_battle_mode;
+
                 // other battle crap here
-                if (battle_opponent > 0) {
+                if (battle_opponent > 0 && !_slot_battles) {
                     // obj_controller.x=self.x;obj_controller.y=self.y;
                     obj_turn_end.battles += 1;
                     obj_turn_end.battle[obj_turn_end.battles] = 1;
