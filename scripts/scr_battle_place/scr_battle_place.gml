@@ -1,14 +1,33 @@
 // Slot-based ground battle model.
 //
 // A planet that is under attack holds a BattleState. Each BattleState owns up to
-// BATTLE_PLACES_MAX "places"; every place has BATTLE_SLOTS_PER_PLACE marine slots and the
-// same number of enemy slots, kept in separate pools. Marine squads can only fight enemy
-// squads that share their place. See scr_battle_resolve for the end-of-turn resolution.
+// BATTLE_PLACES_MAX "places"; every place has BATTLE_SLOTS_PER_PLACE marine slots (a player
+// deployment limit) and an UNCAPPED pool of enemy squads. A side with no opponent in its own
+// place attacks into an adjacent place. See scr_battle_resolve for the end-of-turn resolution.
 
 #macro BATTLE_PLACES_MAX 3
 #macro BATTLE_SLOTS_PER_PLACE 10
 // How many enemy squads one point of abstract planet_forces strength represents.
 #macro ENEMY_SQUADS_PER_FORCE 3
+
+// Global enemy survivability multiplier applied to every enemy squad's max health, so enemies are
+// generally tankier. Headcount is unchanged -- each model simply takes more damage to bring down.
+#macro ENEMY_HEALTH_MULT 2.5
+// Vehicle-tagged enemy units (the enemy's armour) are tougher still -- their extra hull lets them
+// soak the focused fire and shield their infantry, mirroring how marine vehicles tank for a squad.
+// (Which unit is shot first is decided by range-reduction priority, not the vehicle tag.)
+#macro ENEMY_VEHICLE_HEALTH_MULT 2.0
+
+// Possible enemy unit tags. An enemy type's `tags` field is a list of these integers; helpers such
+// as EnemySquad.is_vehicle() test membership with array_contains. Add new categories here.
+enum eENEMY_TAG {
+    VEHICLE,    // armour / war engines -- tougher hull (see ENEMY_VEHICLE_HEALTH_MULT)
+    INFANTRY,   // foot troops
+    MONSTROUS,  // monstrous creatures
+    FLYER,      // flying / fast skimmers
+    ELITE,      // elite / heavily-armoured infantry
+    CAVALRY,    // fast-moving shock troops (e.g. bikers)
+}
 
 // Stance bonus added to a place's net distance reduction each turn: "push" drives the line in,
 // "hold" resists closing, "fallback" opens the range hard. The bulk of the shift still comes from
@@ -82,33 +101,32 @@ function planet_place_terrain(system, planet) {
 function faction_unit_types(faction) {
     switch (faction) {
         case eFACTION.ORK: return [
-            {name: "Lootas",      tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.20, healing: 0, models: 300,  dist:  0.0001},
-            {name: "Slugga Boyz", tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.50, healing: 0, models: 300,  dist:  0.0000},
-            {name: "Tankbustas",  tier: 2, max_health: 18,  damage: 90,   damage_reduction: 0.00, optimal: 0.80, healing: 0, models: 100,  dist:  -0.0003},
-            {name: "Ard Boyz",    tier: 2, max_health: 18,  damage: 36,   damage_reduction: 0.10, optimal: 0.45, healing: 0, models: 300,  dist:  0.0000},
-            {name: "Ork Nobz",    tier: 2, max_health: 120,  damage: 90,  damage_reduction: 0.20, optimal: 0.05, healing: 0, models: 30,  dist:  0.0002},
-            {name: "Painboyz",    tier: 3, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.20, healing: 72, models: 9,  dist:  0.0001},
-            {name: "Warbikers",   tier: 3, max_health: 32,  damage: 70,   damage_reduction: 0.10, optimal: 0.05, healing: 0, models: 60,  dist:  0.0008},
-            {name: "Battlewagon", tier: 3, max_health: 320,  damage: 460,   damage_reduction: 0.15, optimal: 0.25, healing: 0, models: 12,  dist:  0.0002},
-            {name: "Deffkoptas",  tier: 4, max_health: 120,  damage: 460,   damage_reduction: 0.25, optimal: 0.70, healing: 0, models: 9,  dist:  -0.0012},
-            {name: "Dakkajet",    tier: 4, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.55, healing: 0, models: 3,  dist:  -0.0012},
-            {name: "Killa Kanz",  tier: 5, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.10, healing: 0, models: 5,  dist:  0.0010},
-            {name: "Meganobz",    tier: 5, max_health: 120,  damage: 720,  damage_reduction: 0.40, optimal: 0.05, healing: 0, models: 15,  dist:  0.0002},
-            {name: "Deff Dreads", tier: 6, max_health: 1250,  damage: 3000,   damage_reduction: 0.50, optimal: 0.50, healing: 0, models: 1,  dist:  0.0010},
-            {name: "Gorkanauts",  tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.15, healing: 0, models: 1,  dist:  0.0010},
-            {name: "Morkanauts",  tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.75, healing: 0, models: 1,  dist:  0.0010},
+            {name: "Lootas",      tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.20, healing: 0, models: 300,  dist:  0.0001},
+            {name: "Slugga Boyz", tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.50, healing: 0, models: 300,  dist:  0.0000},
+            {name: "Tankbustas",  tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 18,  damage: 90,   damage_reduction: 0.00, optimal: 0.80, healing: 0, models: 100,  dist:  -0.0003},
+            {name: "Ard Boyz",    tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 18,  damage: 36,   damage_reduction: 0.10, optimal: 0.45, healing: 0, models: 300,  dist:  0.0000},
+            {name: "Ork Nobz",    tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 120,  damage: 90,  damage_reduction: 0.10, optimal: 0.50, healing: 0, models: 30,   dist:  0.0002},
+            {name: "Warbikers",   tags: [eENEMY_TAG.CAVALRY], tier: 3, max_health: 32,  damage: 70,   damage_reduction: 0.10, optimal: 0.05, healing: 0, models: 60,  dist:  0.0008},
+            {name: "Battlewagon", tags: [eENEMY_TAG.VEHICLE], tier: 3, max_health: 320,  damage: 460,   damage_reduction: 0.15, optimal: 0.25, healing: 0, models: 12,  dist:  0.0002},
+            {name: "Deffkoptas",  tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.FLYER], tier: 4, max_health: 120,  damage: 460,   damage_reduction: 0.25, optimal: 0.70, healing: 0, models: 9,  dist:  -0.0012},
+            {name: "Dakkajet",    tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.FLYER], tier: 4, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.55, healing: 0, models: 3,  dist:  -0.0012},
+            {name: "Killa Kanz",  tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.10, healing: 0, models: 5,  dist:  0.0010},
+            {name: "Meganobz",    tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ELITE], tier: 5, max_health: 120,  damage: 720,  damage_reduction: 0.40, optimal: 0.05, healing: 0, models: 15,  dist:  0.0002},
+            {name: "Deff Dreads", tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 1250,  damage: 3000,   damage_reduction: 0.50, optimal: 0.50, healing: 0, models: 1,  dist:  0.0010},
+            {name: "Gorkanauts",  tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.15, healing: 0, models: 1,  dist:  0.0010},
+            {name: "Morkanauts",  tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.75, healing: 0, models: 1,  dist:  0.0010},
         ];
         case eFACTION.TYRANIDS: return [
-            {name: "Neophytes",        tier: 1, max_health: 10,  damage: 21,  damage_reduction: 0.00, optimal: 0.50, healing: 0,  models: 500, dist:  0.0000},
-            {name: "Gaunts",           tier: 1, max_health: 16,  damage: 21,  damage_reduction: 0.00, optimal: 0.05, healing: 0,  models: 600, dist:  0.0001},
-            {name: "Tyranid Warriors", tier: 2, max_health: 75,  damage: 100, damage_reduction: 0.00, optimal: 0.05, healing: 10,  models: 40,  dist:  0.0002},
-            {name: "Carnifexes",       tier: 3, max_health: 260, damage: 1000, damage_reduction: 0.00, optimal: 0.05, healing: 20, models: 4,   dist:  0.0003},
+            {name: "Neophytes",        tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 10,  damage: 21,  damage_reduction: 0.00, optimal: 0.50, healing: 0,  models: 500, dist:  0.0000},
+            {name: "Gaunts",           tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 16,  damage: 21,  damage_reduction: 0.00, optimal: 0.05, healing: 0,  models: 600, dist:  0.0001},
+            {name: "Tyranid Warriors", tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 75,  damage: 100, damage_reduction: 0.00, optimal: 0.05, healing: 10,  models: 40,  dist:  0.0002},
+            {name: "Carnifexes",       tags: [eENEMY_TAG.MONSTROUS], tier: 3, max_health: 260, damage: 1000, damage_reduction: 0.00, optimal: 0.05, healing: 20, models: 4,   dist:  0.0003},
         ];
         case eFACTION.TAU: return [
-            {name: "Kroots",        tier: 1, max_health: 16,  damage: 60,  damage_reduction: 0.00, optimal: 0.05, healing: 0, models: 150, dist:  0.0002},
-            {name: "Fire Warriors", tier: 2, max_health: 14,  damage: 120, damage_reduction: 0.00, optimal: 0.75, healing: 0, models: 90, dist: -0.0001},
-            {name: "Crisis Suits",  tier: 3, max_health: 70,  damage: 500, damage_reduction: 0.05, optimal: 0.50, healing: 0, models: 16, dist: 0.0000},
-            {name: "Broadsides",    tier: 5, max_health: 180, damage: 5000, damage_reduction: 0.10, optimal: 0.95, healing: 0, models: 3,  dist: -0.0006},
+            {name: "Kroots",        tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 16,  damage: 60,  damage_reduction: 0.00, optimal: 0.05, healing: 0, models: 150, dist:  0.0002},
+            {name: "Fire Warriors", tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 14,  damage: 120, damage_reduction: 0.00, optimal: 0.75, healing: 0, models: 90, dist: -0.0001},
+            {name: "Crisis Suits",  tags: [eENEMY_TAG.VEHICLE], tier: 3, max_health: 70,  damage: 500, damage_reduction: 0.05, optimal: 0.50, healing: 0, models: 16, dist: 0.0000},
+            {name: "Broadsides",    tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 180, damage: 5000, damage_reduction: 0.10, optimal: 0.95, healing: 0, models: 3,  dist: -0.0006},
         ];
         case eFACTION.NECRONS: return [
             {name: "Necron Warriors", tier: 1, max_health: 24, damage: 300, damage_reduction: 0.15, optimal: 0.70, healing: 4, models: 30, dist: -0.0001},
@@ -118,7 +136,7 @@ function faction_unit_types(faction) {
         case eFACTION.ELDAR: return [
             {name: "Guardians",     tier: 1, max_health: 18, damage: 240,  damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 30, dist: 0.0002},
             {name: "Dire Avengers", tier: 3, max_health: 34, damage: 450, damage_reduction: 0.30, optimal: 0.50, healing: 0, models: 15, dist: 0.0000},
-            {name: "Wraithguards",   tier: 5, max_health: 60, damage: 810, damage_reduction: 0.30, optimal: 0.35, healing: 4, models: 8,  dist:  0.0002},
+            {name: "Wraithguards",   tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 60, damage: 810, damage_reduction: 0.30, optimal: 0.35, healing: 4, models: 8,  dist:  0.0002},
         ];
         case eFACTION.CHAOS: return [
             {name: "Chaos Cultists",      tier: 1, max_health: 10,  damage: 12,   damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 500, dist:  0.000},
@@ -172,14 +190,24 @@ function pick_enemy_unit_type(faction, force) {
 
 /// @param {real} faction eFACTION of the attacker this squad belongs to.
 /// @param {Struct} [type_data] A unit type from faction_unit_types(); defaults to the basic type.
-function EnemySquad(faction, type_data = undefined) constructor {
+// `apply_buffs` should be true for freshly-fielded squads (so the global tankiness and vehicle
+// health multipliers apply to the base faction_unit_types value); pass false when restoring a
+// squad from save data whose max_health is already the buffed figure, to avoid double-scaling.
+function EnemySquad(faction, type_data = undefined, apply_buffs = true) constructor {
     self.faction = faction;
     if (!is_struct(type_data)) {
         type_data = faction_unit_types(faction)[0];
     }
     unit_name = type_data.name;
     tier = variable_struct_exists(type_data, "tier") ? type_data.tier : 1;
-    max_health = type_data.max_health;
+    // Unit tags: a list of eENEMY_TAG integers describing what this unit is (e.g. VEHICLE). Tested
+    // via has_tag() / is_vehicle(). Set with a `tags` list in faction_unit_types.
+    tags = variable_struct_exists(type_data, "tags") ? type_data.tags : [];
+    var _is_vehicle = array_contains(tags, eENEMY_TAG.VEHICLE);
+    // Enemies are globally tankier; vehicles (the enemy's armour) tougher still. Scaling max_health
+    // (and health with it) leaves the model count unchanged -- each model just absorbs more damage.
+    var _health_mult = apply_buffs ? (ENEMY_HEALTH_MULT * (_is_vehicle ? ENEMY_VEHICLE_HEALTH_MULT : 1)) : 1;
+    max_health = type_data.max_health * _health_mult;
     health = max_health;                 // current hit points (depletes as damaged, heals back)
     damage = type_data.damage;           // combat output per phase (before range/strength scaling)
     damage_reduction = variable_struct_exists(type_data, "damage_reduction") ? type_data.damage_reduction : 0;
@@ -202,6 +230,16 @@ function EnemySquad(faction, type_data = undefined) constructor {
 
     static is_alive = function() {
         return health > 0;
+    };
+
+    // True if this unit carries the given eENEMY_TAG.
+    static has_tag = function(tag) {
+        return array_contains(tags, tag);
+    };
+
+    // The function that checks for enemy vehicles: searches the tag list for the VEHICLE tag.
+    static is_vehicle = function() {
+        return array_contains(tags, eENEMY_TAG.VEHICLE);
     };
 
     // Models still standing, scaled by remaining health.
@@ -250,7 +288,7 @@ function EnemySquad(faction, type_data = undefined) constructor {
 function BattlePlace(index, terrain_data = undefined) constructor {
     self.index = index;
     marine_slots = array_create(BATTLE_SLOTS_PER_PLACE, undefined); // holds squad uids (strings)
-    enemy_slots = array_create(BATTLE_SLOTS_PER_PLACE, undefined);  // holds EnemySquad structs
+    enemy_slots = [];  // holds EnemySquad structs -- UNBOUNDED (no per-place cap on enemy squads)
 
     // Terrain + engagement distance. Distance starts at this place's max and closes each turn.
     // Terrain is fixed for the planet (passed in); only fall back to a random roll if missing.
@@ -279,35 +317,21 @@ function BattlePlace(index, terrain_data = undefined) constructor {
     };
 
     static enemy_count = function() {
-        var _c = 0;
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
-            if (enemy_slots[i] != undefined) {
-                _c++;
-            }
-        }
-        return _c;
+        return array_length(enemy_slots); // dynamic array: no undefined holes
     };
 
     static free_marine_slots = function() {
         return BATTLE_SLOTS_PER_PLACE - marine_count();
     };
 
+    // Enemy squads are uncapped per place, so there is always room.
     static free_enemy_slots = function() {
-        return BATTLE_SLOTS_PER_PLACE - enemy_count();
+        return infinity;
     };
 
     static first_free_marine_slot = function() {
         for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
             if (marine_slots[i] == undefined) {
-                return i;
-            }
-        }
-        return -1;
-    };
-
-    static first_free_enemy_slot = function() {
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
-            if (enemy_slots[i] == undefined) {
                 return i;
             }
         }
@@ -327,11 +351,7 @@ function BattlePlace(index, terrain_data = undefined) constructor {
     };
 
     static add_enemy_squad = function(enemy_squad) {
-        var _slot = first_free_enemy_slot();
-        if (_slot == -1) {
-            return false;
-        }
-        enemy_slots[_slot] = enemy_squad;
+        array_push(enemy_slots, enemy_squad); // uncapped: always succeeds
         return true;
     };
 
@@ -346,9 +366,9 @@ function BattlePlace(index, terrain_data = undefined) constructor {
     };
 
     static remove_enemy_squad = function(enemy_squad) {
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
+        for (var i = 0; i < array_length(enemy_slots); i++) {
             if (enemy_slots[i] == enemy_squad) {
-                enemy_slots[i] = undefined;
+                array_delete(enemy_slots, i, 1);
                 return true;
             }
         }
@@ -367,19 +387,17 @@ function BattlePlace(index, terrain_data = undefined) constructor {
 
     static enemy_squads = function() {
         var _out = [];
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
-            if (enemy_slots[i] != undefined) {
-                array_push(_out, enemy_slots[i]);
-            }
+        for (var i = 0; i < array_length(enemy_slots); i++) {
+            array_push(_out, enemy_slots[i]);
         }
         return _out;
     };
 
     // Drops any enemy squads that have been reduced to zero strength.
     static cull_dead_enemies = function() {
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
-            if (enemy_slots[i] != undefined && !enemy_slots[i].is_alive()) {
-                enemy_slots[i] = undefined;
+        for (var i = array_length(enemy_slots) - 1; i >= 0; i--) {
+            if (!enemy_slots[i].is_alive()) {
+                array_delete(enemy_slots, i, 1);
             }
         }
     };
@@ -412,8 +430,10 @@ function BattleState(system, planet) constructor {
     shift_timer = OBJECTIVE_SHIFT_TURNS; // turns until the objective shifts to another place
     shift_warning = false;        // true the turn before a shift (UI hint)
 
-    // Cap on simultaneous enemy slots; lowered by a planet's Imperial Guard garrison (Phase 4).
-    max_enemy_slots = BATTLE_PLACES_MAX * BATTLE_SLOTS_PER_PLACE;
+    // Upper bound on the number of enemy squads that can be fielded at once. Enemy squads are NOT
+    // capped per place; this is just a high ceiling so the planet's force scalar (and the squads-
+    // per-force ratio) is what actually decides how many squads materialise/reinforce.
+    max_enemy_slots = 999;
 
     // Convenience accessors for the role places (return undefined if somehow missing).
     static place_of_role = function(_role) {
@@ -539,6 +559,7 @@ function BattleState(system, planet) constructor {
                     optimal: variable_struct_exists(_e, "optimal") ? _e.optimal : 0.5,
                     falloff: variable_struct_exists(_e, "falloff") ? _e.falloff : 1.6,
                     max_kills: variable_struct_exists(_e, "max_kills") ? _e.max_kills : 1,
+                    tags: variable_struct_exists(_e, "tags") ? _e.tags : [],
                     models: variable_struct_exists(_e, "models") ? _e.models : 15,
                     dist: variable_struct_exists(_e, "dist") ? _e.dist : 0,
                     deployed_this_turn: variable_struct_exists(_e, "deployed_this_turn") ? _e.deployed_this_turn : false
@@ -615,7 +636,11 @@ function battle_state_from_data(system, planet, data) {
             if (variable_struct_exists(_ed, "max_kills")) {
                 _td.max_kills = _ed.max_kills; // restore saved Max Kills (else EnemySquad defaults to 1)
             }
-            var _sq = new EnemySquad(_ed.faction, _td);
+            if (variable_struct_exists(_ed, "tags")) {
+                _td.tags = _ed.tags; // restore the unit's tag list (vehicle toughness etc.)
+            }
+            // apply_buffs = false: the saved max_health is already the buffed figure -- don't re-scale.
+            var _sq = new EnemySquad(_ed.faction, _td, false);
             if (variable_struct_exists(_ed, "health")) {
                 _sq.health = _ed.health; // restore current (possibly reduced) hit points
             }
@@ -1216,42 +1241,75 @@ function place_enemy_power(place) {
 
 // --- Damage application -----------------------------------------------------------------
 
-// Spreads damage across the enemy squads in a place; each squad mitigates by its own
-// damage_reduction. `kill_cap` limits how many enemy MODELS may be removed (Max Kills): if the
-// damage would kill more than that, it is scaled down so roughly kill_cap models fall. Returns
-// total health actually removed (for experience awards).
+// Comparators for target priority: units contributing the most to range reduction (closing or
+// opening the engagement most) are dealt with FIRST, the least-contributing LAST. Sort descending
+// by the unit's signed distance_reduction.
+function enemy_range_priority_compare(a, b) {
+    var _ra = a.distance_reduction();
+    var _rb = b.distance_reduction();
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+function marine_range_priority_compare(a, b) {
+    var _ra = marine_distance_reduction(a);
+    var _rb = marine_distance_reduction(b);
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+
+// Fire on the enemy squads in a place, prioritising those with the highest range-reduction
+// contribution: damage focus-fires the top-priority squad, spilling any overkill down the list, so
+// the lowest-contribution squads are hit last. Each squad mitigates by its own damage_reduction.
+// `kill_cap` limits how many enemy MODELS may be removed (Max Kills): if the focused fire would
+// kill more than that, it is scaled down so roughly kill_cap models fall. Returns total health
+// removed (for experience awards).
 function apply_damage_to_enemies(place, damage, kill_cap = infinity) {
-    var _en = place.enemy_squads();
+    var _en = place.enemy_squads(); // fresh array -- safe to reorder for targeting priority
     var _n = array_length(_en);
     if (_n == 0) {
         return 0;
     }
-    // Estimate how many models the unscaled damage would kill, so we can honour the kill cap.
+    array_sort(_en, enemy_range_priority_compare); // highest range-reduction first
+
+    // Max Kills: simulate the focus-fire and scale damage so at most ~kill_cap models fall.
     if (kill_cap < infinity) {
-        var _share_sim = damage / _n;
         var _would_kill = 0;
-        for (var e = 0; e < _n; e++) {
+        var _dsim = damage;
+        for (var e = 0; e < _n && _dsim > 0; e++) {
             var _eu = _en[e];
-            var _net = _share_sim * (1 - _eu.damage_reduction);
+            var _dr = _eu.damage_reduction;
+            var _net = _dsim * (1 - _dr);
             var _new_health = max(0, _eu.health - _net);
             var _after = (_new_health <= 0) ? 0 : max(1, round(_eu.models * (_new_health / _eu.max_health)));
             _would_kill += max(0, _eu.model_count() - _after);
+            var _hlost = _eu.health - _new_health;
+            _dsim -= ((1 - _dr) > 0) ? (_hlost / (1 - _dr)) : _dsim;
         }
         if (_would_kill > kill_cap && _would_kill > 0) {
-            damage *= (kill_cap / _would_kill); // scale damage so ~kill_cap models are removed
+            damage *= (kill_cap / _would_kill);
         }
     }
-    var _share = damage / _n;
+
+    // Focus-fire down the priority list, spilling leftover damage to the next target.
     var _removed = 0;
-    for (var e = 0; e < _n; e++) {
-        _removed += _en[e].take_damage(_share); // take_damage applies the squad's damage_reduction
+    var _dleft = damage;
+    for (var e = 0; e < _n && _dleft > 0; e++) {
+        var _eu = _en[e];
+        var _dr = _eu.damage_reduction;
+        var _lost = _eu.take_damage(_dleft); // applies the squad's damage_reduction, caps at its health
+        _removed += _lost;
+        _dleft -= ((1 - _dr) > 0) ? (_lost / (1 - _dr)) : _dleft;
     }
     return _removed;
 }
 
-// Spreads damage across the living marines in a place; kills any reduced to <= 0 hp, but no more
-// than `kill_cap` marines may die this phase (the enemy's Max Kills). Marines who would die beyond
-// the cap survive at 1 hp -- the enemy simply couldn't finish that many in one exchange.
+// Enemy fire falls on the living marines in a place, prioritising those with the highest range-
+// reduction contribution: it focus-fires the top-priority marine (killing it and spilling overkill
+// to the next), so the lowest-contribution marines are hit last. No more than `kill_cap` marines
+// may die this phase (the enemy's Max Kills); once that is reached the current target clings on at
+// 1 hp and the rest are spared this exchange.
 function apply_damage_to_marines(place, damage, kill_cap = infinity) {
     var _members = [];
     var _uids = place.marine_squad_uids();
@@ -1265,18 +1323,26 @@ function apply_damage_to_marines(place, damage, kill_cap = infinity) {
     if (_n == 0) {
         return;
     }
-    var _share = damage / _n;
+    array_sort(_members, marine_range_priority_compare); // highest range-reduction first
+
     var _deaths = 0;
-    for (var i = 0; i < _n; i++) {
+    var _dleft = damage;
+    for (var i = 0; i < _n && _dleft > 0; i++) {
         var _u = _members[i];
-        _u.add_or_sub_health(-_share);
-        if (_u.hp() <= 0) {
-            if (_deaths < kill_cap) {
-                kill_and_recover(_u.company, _u.marine_number, true, true);
-                _deaths++;
-            } else {
-                _u.add_or_sub_health(1 - _u.hp()); // capped: leave the marine clinging on at 1 hp
+        var _hp = _u.hp();
+        if (_dleft >= _hp) {
+            // Enough fire to drop this marine.
+            if (_deaths >= kill_cap) {
+                _u.add_or_sub_health(1 - _hp); // Max Kills reached: clings on at 1 hp, fire stops here
+                break;
             }
+            _u.add_or_sub_health(-_hp);
+            kill_and_recover(_u.company, _u.marine_number, true, true);
+            _deaths++;
+            _dleft -= _hp; // overkill spills to the next priority marine
+        } else {
+            _u.add_or_sub_health(-_dleft); // wounds but does not kill
+            _dleft = 0;
         }
     }
 }
@@ -1322,36 +1388,79 @@ function free_empty_marine_slots(place) {
     }
 }
 
-// Resolves one combat PHASE ("ranged" or "melee") in a place: both sides deal the damage their
-// matching-phase weapons/units produce. Enemies are mitigated by their damage_reduction (inside
-// take_damage); marines/vehicles take their share of the incoming fire.
-function resolve_place_phase(place, phase) {
-    if (place.marine_count() == 0 || place.enemy_count() == 0) {
-        return;
-    }
-    var _m_power = place_marine_phase_power(place, phase);
-    var _e_power = place_enemy_phase_power(place, phase);
+// Indices of the places physically adjacent to place `idx`. Places form a line (0-1-2...), so each
+// has one or two neighbours.
+function adjacent_place_indices(battle_state, idx) {
+    var _out = [];
+    var _n = array_length(battle_state.places);
+    if (idx - 1 >= 0)  { array_push(_out, idx - 1); }
+    if (idx + 1 < _n)  { array_push(_out, idx + 1); }
+    return _out;
+}
 
-    if (_m_power > 0) {
-        var _enemy_damage = _m_power * MARINE_DAMAGE_COEF * random_range(0.8, 1.2);
-        // Max Kills: marines can't remove more enemy models this phase than their weapons allow.
-        var _marine_kill_cap = place_marine_phase_kill_cap(place, phase);
-        var _removed = apply_damage_to_enemies(place, _enemy_damage, _marine_kill_cap);
-        award_place_experience(place, _removed);
+// The place that units in place `idx` attack this phase. They strike their OWN place if it holds
+// opposing targets; otherwise they reach into the adjacent place -- and when two are adjacent, the
+// one with FEWER targets (concentrating force to mop up the weaker flank). `want` is "enemies"
+// (marines choosing a target) or "marines" (enemies choosing a target). Returns undefined when
+// there is nothing in reach to attack.
+function combat_target_place(battle_state, idx, want) {
+    var _here = battle_state.places[idx];
+    var _local = (want == "enemies") ? _here.enemy_count() : _here.marine_count();
+    if (_local > 0) {
+        return _here;
     }
-    if (_e_power > 0) {
-        var _marine_damage = _e_power * ENEMY_DAMAGE_COEF * random_range(0.8, 1.2);
-        // Max Kills: the enemy can't cut down more marines this phase than their numbers allow.
-        var _enemy_kill_cap = place_enemy_phase_kill_cap(place, phase);
-        apply_damage_to_marines(place, _marine_damage, _enemy_kill_cap);
-        // Vehicles draw a large share of the incoming fire (0.85). They are tough but not
-        // indestructible -- sustained enemy fire wrecks them over a handful of turns, after which
-        // the marines lose that fire support and start taking the casualties themselves.
-        apply_damage_to_vehicles(place, _marine_damage * 0.85);
+    var _adj = adjacent_place_indices(battle_state, idx);
+    var _best = undefined;
+    var _best_count = infinity;
+    for (var a = 0; a < array_length(_adj); a++) {
+        var _q = battle_state.places[_adj[a]];
+        var _c = (want == "enemies") ? _q.enemy_count() : _q.marine_count();
+        if (_c > 0 && _c < _best_count) {
+            _best_count = _c;
+            _best = _q;
+        }
     }
+    return _best;
+}
 
-    place.cull_dead_enemies();
-    free_empty_marine_slots(place);
+// Resolves one combat PHASE ("ranged" or "melee") across the WHOLE battle. Every place's marines
+// fire on enemies and every place's enemies fall on marines -- striking their own place when it
+// holds opposing targets, otherwise reaching into the adjacent place with fewer targets. Power and
+// Max-Kills are computed from the attacker's place; damage lands on the target place. Enemies are
+// mitigated by their damage_reduction (inside take_damage); marines/vehicles take their share.
+function resolve_battle_phase(battle_state, phase) {
+    var _places = battle_state.places;
+    var _n = array_length(_places);
+    for (var i = 0; i < _n; i++) {
+        var P = _places[i];
+        // Marines in P fire on enemies (here, or the lighter adjacent place).
+        var _etarget = combat_target_place(battle_state, i, "enemies");
+        if (_etarget != undefined) {
+            var _m_power = place_marine_phase_power(P, phase);
+            if (_m_power > 0) {
+                var _enemy_damage = _m_power * MARINE_DAMAGE_COEF * random_range(0.8, 1.2);
+                var _marine_kill_cap = place_marine_phase_kill_cap(P, phase);
+                var _removed = apply_damage_to_enemies(_etarget, _enemy_damage, _marine_kill_cap);
+                award_place_experience(P, _removed);
+            }
+        }
+        // Enemies in P fall on marines (here, or the lighter adjacent place).
+        var _mtarget = combat_target_place(battle_state, i, "marines");
+        if (_mtarget != undefined) {
+            var _e_power = place_enemy_phase_power(P, phase);
+            if (_e_power > 0) {
+                var _marine_damage = _e_power * ENEMY_DAMAGE_COEF * random_range(0.8, 1.2);
+                var _enemy_kill_cap = place_enemy_phase_kill_cap(P, phase);
+                apply_damage_to_marines(_mtarget, _marine_damage, _enemy_kill_cap);
+                apply_damage_to_vehicles(_mtarget, _marine_damage * 0.85);
+            }
+        }
+    }
+    // Clear casualties everywhere once the exchange is done.
+    for (var i = 0; i < _n; i++) {
+        _places[i].cull_dead_enemies();
+        free_empty_marine_slots(_places[i]);
+    }
 }
 
 // Rebuilds any legacy enemy squad (created before the HP-stat rewrite -- it lacks `health` and the
@@ -1360,7 +1469,7 @@ function resolve_place_phase(place, phase) {
 function repair_battle_enemy_squads(battle_state) {
     for (var p = 0; p < array_length(battle_state.places); p++) {
         var _place = battle_state.places[p];
-        for (var i = 0; i < BATTLE_SLOTS_PER_PLACE; i++) {
+        for (var i = 0; i < array_length(_place.enemy_slots); i++) {
             var _e = _place.enemy_slots[i];
             if (!is_struct(_e)) {
                 continue;
@@ -1391,8 +1500,12 @@ function repair_battle_enemy_squads(battle_state) {
             if (variable_struct_exists(_e, "max_kills")) {
                 _td.max_kills = _e.max_kills; // preserve any existing Max Kills (else EnemySquad defaults to 1)
             }
+            if (variable_struct_exists(_e, "tags")) {
+                _td.tags = _e.tags; // preserve the unit's tag list if it was already set
+            }
             var _faction = variable_struct_exists(_e, "faction") ? _e.faction : battle_state.enemy_faction;
-            var _new = new EnemySquad(_faction, _td);
+            // apply_buffs = false: _max_hp is taken from the existing squad as-is, not re-scaled.
+            var _new = new EnemySquad(_faction, _td, false);
             _new.health = clamp(_hp, 0, _new.max_health);
             _place.enemy_slots[i] = _new;
         }
@@ -1552,62 +1665,21 @@ function maneuver_battle(battle_state) {
     }
 }
 
-// The enemy's movement & reinforcement phase. The attacker has ENEMY_CP_PER_TURN command points:
-//   - reinforcements (1 CP each) enter ONLY at the reinforcement place, drawn from the scalar
-//     reserve up to the reserve-implied field strength;
-//   - remaining CP advance existing squads toward the objective (1 CP each), but squads that
-//     arrived THIS turn (deployed_this_turn) cannot be moved on.
+// The enemy's reinforcement phase. Fresh squads enter at the reinforcement place (drawn from the
+// planet's force reserve, up to the field strength it implies), one per enemy command point.
+// Enemies do NOT relocate between places: a place with no marines to fight simply attacks into the
+// adjacent place during engagement (see resolve_battle_phase), so each place keeps its garrison.
 function resolve_enemy_turn(battle_state, planet_data) {
-    // Clear last turn's "just deployed" flags so those squads may advance this turn.
-    for (var i = 0; i < array_length(battle_state.places); i++) {
-        var _prev = battle_state.places[i].enemy_squads();
-        for (var e = 0; e < array_length(_prev); e++) {
-            _prev[e].deployed_this_turn = false;
-        }
-    }
-
     var _cp = ENEMY_CP_PER_TURN;
     var _faction = battle_state.enemy_faction;
     var _force = planet_data.planet_forces[_faction];
     var _field_cap = min(_force * ENEMY_SQUADS_PER_FORCE, battle_state.max_enemy_slots);
 
-    // Reinforce at the reinforcement place.
     while (_cp > 0 && battle_state.total_enemies() < _field_cap) {
         if (!battle_state.add_enemy_reinforcement(new EnemySquad(_faction, pick_enemy_unit_type(_faction, _force)))) {
-            break; // reinforcement place full or overall slot cap reached
+            break; // reinforcement place unavailable
         }
         _cp--;
-    }
-
-    // Advance toward the objective ONLY to contest it. Enemies converge on the objective when
-    // marines are trying to hold it, but they never abandon a place: each non-objective place
-    // keeps at least one defending squad. This way an enemy garrison persists in every place
-    // across objective shifts (a place that held, say, one squad keeps it), while surplus forces
-    // can still move to secure the objective whenever the marines press it -- including right
-    // after the objective relocates to fresh ground.
-    var _obj = battle_state.objective_place();
-    if (_obj != undefined && _obj.marine_count() > 0) {
-        for (var i = 0; i < array_length(battle_state.places) && _cp > 0; i++) {
-            var P = battle_state.places[i];
-            if (P == _obj) {
-                continue;
-            }
-            var _en = P.enemy_squads();
-            for (var e = 0; e < array_length(_en) && _cp > 0; e++) {
-                if (P.enemy_count() <= 1) {
-                    break; // leave a defender behind -- never strip a place bare
-                }
-                if (_en[e].deployed_this_turn) {
-                    continue; // just arrived this turn -- can't move on yet
-                }
-                if (_obj.free_enemy_slots() <= 0) {
-                    break;
-                }
-                P.remove_enemy_squad(_en[e]);
-                _obj.add_enemy_squad(_en[e]);
-                _cp--;
-            }
-        }
     }
 }
 
@@ -1894,23 +1966,18 @@ function resolve_planet_battle(system, planet) {
     }
     var _bs = _pdata.battle_state();
     repair_battle_enemy_squads(_bs); // migrate any pre-rewrite enemy squads still in memory
-    apply_garrison_cap(_pdata, _bs); // Imperial Guard garrison cap on enemy slots
 
     var _m_before = _bs.total_marines();
     var _e_before = _bs.total_enemies();
 
-    // --- Movement & reinforcement: enemy reinforces (at the reinforcement place) and advances
-    //     toward the objective; cleared marine squads regroup toward the fighting. ---
+    // --- Reinforcement: enemy brings fresh squads in at the reinforcement place (up to the force
+    //     scalar). Units no longer relocate -- they engage across place boundaries instead. ---
     resolve_enemy_turn(_bs, _pdata);
-    maneuver_battle(_bs);
 
-    // --- Engagement resolution: ranged, then melee, then healing, then range shift. ---
-    for (var i = 0; i < array_length(_bs.places); i++) {
-        resolve_place_phase(_bs.places[i], "ranged");
-    }
-    for (var i = 0; i < array_length(_bs.places); i++) {
-        resolve_place_phase(_bs.places[i], "melee");
-    }
+    // --- Engagement resolution: ranged, then melee, then healing, then range shift. Each phase
+    //     resolves the whole battle so units with no local foe strike into the adjacent place. ---
+    resolve_battle_phase(_bs, "ranged");
+    resolve_battle_phase(_bs, "melee");
     for (var i = 0; i < array_length(_bs.places); i++) {
         resolve_place_healing(_bs.places[i]);
     }
