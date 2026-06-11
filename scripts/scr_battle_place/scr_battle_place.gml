@@ -26,6 +26,8 @@ enum eENEMY_TAG {
     MONSTROUS,  // monstrous creatures
     FLYER,      // flying / fast skimmers
     ELITE,      // elite / heavily-armoured infantry
+    ARMOURED,
+    COMMAND,
     CAVALRY,    // fast-moving shock troops (e.g. bikers)
 }
 
