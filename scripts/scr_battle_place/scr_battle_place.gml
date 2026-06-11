@@ -854,37 +854,57 @@ function weapon_distance_efficiency(weapon, distance) {
     return _best;
 }
 
-// Per-turn distance reduction a weapon contributes (positive closes toward melee, negative
-// opens toward range). Close-combat weapons pull in; heavy/sniper ranged weapons pull out;
-// knives/spears/staves and mid-range guns (bolters/pistols) are neutral.
+// A weapon's tag list (the lowercase tag strings from weapons.json). Reads an EquipmentStruct /
+// artifact's own `tags` if present, otherwise looks the weapon up by name in the global weapons
+// table. Returns an empty array for unknown/untagged weapons.
+function weapon_tag_list(weapon) {
+    if (is_struct(weapon) && variable_struct_exists(weapon, "tags") && is_array(weapon.tags)) {
+        return weapon.tags;
+    }
+    var _name = weapon_name_string(weapon);
+    if (_name != "" && variable_struct_exists(global.weapons, _name)) {
+        var _w = global.weapons[$ _name];
+        if (variable_struct_exists(_w, "tags") && is_array(_w.tags)) {
+            return _w.tags;
+        }
+    }
+    return [];
+}
+
+// True if the tag list marks a melee (close-combat) weapon. A generic "melee" tag is honoured, as
+// are the specific close-combat weapon tags used in weapons.json.
+function weapon_is_melee_tagged(_tags) {
+    var _melee = ["melee", "sword", "axe", "fist", "hammer", "mace", "chain", "spear", "heavy_melee", "power", "force"];
+    for (var i = 0; i < array_length(_melee); i++) {
+        if (array_contains(_tags, _melee[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Per-turn range-reduction a weapon contributes (positive closes toward melee, negative opens
+// toward range), decided entirely by the weapon's TAGS:
+//   - banner: a company standard rallies the line and holds it at range (strong negative).
+//   - heavy_ranged, unless it is also flame/melta: heavy guns kite to keep the range open.
+//   - sniper: snipers / long rifles likewise open the range (they are not "heavy" weapons).
+//   - melee, unless it is a knife or polearm: close-combat weapons drive the charge in.
+//   - everything else (bolters, pistols, knives, polearms, short-ranged flame/melta heavies): neutral.
 function weapon_distance_reduction(weapon) {
-    var _n = string_lower(weapon_name_string(weapon));
-    if (_n == "") {
-        return 0;
+    var _tags = weapon_tag_list(weapon);
+    if (array_contains(_tags, "banner") || array_contains(_tags, "standard")) {
+        return -0.017;
     }
-    if (string_pos("standard", _n) || string_pos("banner", _n)) {
-        return -0.017; // company standard: a rallying point that holds the line at range
+    if (array_contains(_tags, "heavy_ranged") && !array_contains(_tags, "flame") && !array_contains(_tags, "melta")) {
+        return -0.013;
     }
-    if (string_pos("knife", _n) || string_pos("spear", _n) || string_pos("staff", _n)) {
-        return 0; // close weapons that don't drive the charge
+    if (array_contains(_tags, "sniper")) {
+        return -0.013;
     }
-    if (string_pos("sword", _n) || string_pos("axe", _n) || string_pos("hammer", _n)
-        || string_pos("claw", _n) || string_pos("fist", _n) || string_pos("chain", _n)
-        || string_pos("maul", _n) || string_pos("glaive", _n) || string_pos("halberd", _n)
-        || string_pos("crozius", _n) || string_pos("blade", _n) || string_pos("whip", _n)
-        || string_pos("lance", _n)|| string_pos("eviscerator", _n)|| string_pos("standard", _n)
-        || string_pos("close combat weapon", _n)) {
-        return 0.01; // melee weapons drive the charge in
+    if (weapon_is_melee_tagged(_tags) && !array_contains(_tags, "knife") && !array_contains(_tags, "polearm")) {
+        return 0.01;
     }
-    if (string_pos("heavy flamer", _n) || string_pos("multi-melta", _n) || string_pos("multimelta", _n)) {
-        return 0; // short-ranged heavy weapons don't want to kite
-    }
-    if (string_pos("lascannon", _n) || string_pos("missile", _n) || string_pos("autocannon", _n)
-        || string_pos("heavy bolter", _n) || string_pos("plasma cannon", _n) || string_pos("cannon", _n)
-        || string_pos("sniper", _n) || string_pos("longrifle", _n)) {
-        return -0.013; // heavy ranged / snipers want to open the range
-    }
-    return 0; // bolters / mid-range / pistols: neutral
+    return 0;
 }
 
 // Mobility (jump pack / bike) lets a marine close distance quickly.

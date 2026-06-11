@@ -646,7 +646,8 @@
         "spli": 1,
         "tags": [
             "precision",
-            "rifle"
+            "rifle",
+            "sniper"
         ],
         "value": 200
     },
@@ -931,7 +932,8 @@
         },
         "spli": 5,
         "tags": [
-            "force"
+            "force",
+            "polearm"
         ],
         "value": 70
     },
@@ -1298,7 +1300,8 @@
         "range": 50,
         "spli": 1,
         "tags": [
-            "vehicle"
+            "vehicle",
+            "heavy_ranged"
         ],
         "value": 10
     },
@@ -2195,7 +2198,8 @@
         "ranged_hands": 1,
         "spli": 6,
         "tags": [
-            "power"
+            "power",
+            "polearm"
         ]
     },
     "Power Spear": {
@@ -2226,7 +2230,8 @@
         "tags": [
             "power",
             "spear",
-            "martial"
+            "martial",
+            "polearm"
         ],
         "value": 40
     },
@@ -2365,7 +2370,8 @@
         "tags": [
             "las",
             "rifle",
-            "precision"
+            "precision",
+            "sniper"
         ]
     },
     "Reaper Autocannon Mount": {
@@ -2585,7 +2591,8 @@
         "spli": 1,
         "tags": [
             "precision",
-            "rifle"
+            "rifle",
+            "sniper"
         ],
         "value": 10
     },
