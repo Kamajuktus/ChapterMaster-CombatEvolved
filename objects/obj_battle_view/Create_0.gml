@@ -123,6 +123,68 @@ squad_battle_label = function(squad_uid) {
     return squad_gives_command_bonus(squad_uid) ? (_nm + " *") : _nm;
 };
 
+// Roman numeral for a positive integer (1 -> "I", 4 -> "IV", 10 -> "X", ...).
+int_to_roman = function(n) {
+    if (n <= 0) { return string(n); }
+    var _vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
+    var _syms = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"];
+    var _out = "";
+    for (var i = 0; i < array_length(_vals); i++) {
+        while (n >= _vals[i]) {
+            _out += _syms[i];
+            n -= _vals[i];
+        }
+    }
+    return _out;
+};
+
+// Short company "sign" for a squad's battlefield circle: line companies as a Roman numeral,
+// Headquarters as "HQ", the four institutions as a single initial.
+squad_company_tag = function(squad_uid) {
+    var _sq = fetch_squad(squad_uid);
+    if (!is_struct(_sq)) { return "?"; }
+    var _c = _sq.base_company;
+    if (_c == 0) { return "HQ"; }
+    if (_c == GROUP_APOTHECARIUM) { return "A"; }
+    if (_c == GROUP_LIBRARIUM) { return "L"; }
+    if (_c == GROUP_RECLUSIUM) { return "R"; }
+    if (_c == GROUP_ARMOURY) { return "M"; }
+    return int_to_roman(_c);
+};
+
+// True if either of a unit's weapons carries the heavy_ranged tag (a squad heavy weapon).
+marine_has_heavy_ranged = function(unit) {
+    return array_contains(weapon_tag_list(unit.weapon_one()), "heavy_ranged")
+        || array_contains(weapon_tag_list(unit.weapon_two()), "heavy_ranged");
+};
+
+// Up to three representative members to show beneath a squad's circle: its sergeant/leader,
+// its attached specialist (if any), and one regular trooper -- preferring whoever carries a
+// heavy ranged weapon. Returns an array of { unit, kind, heavy } with kind in
+// "sergeant" | "specialist" | "regular", in that draw order.
+squad_roster_picks = function(squad_uid) {
+    var _mems = marine_squad_living_members(squad_uid);
+    var _sq = fetch_squad(squad_uid);
+    var _leader = is_struct(_sq) ? _sq.squad_leader : "none";
+
+    var _sgt = undefined, _spec = undefined, _reg_heavy = undefined, _reg_any = undefined;
+    for (var i = 0; i < array_length(_mems); i++) {
+        var _u = _mems[i];
+        var _is_leader = (is_array(_leader) && _u.company == _leader[0] && _u.marine_number == _leader[1]);
+        if (_is_leader && _sgt == undefined) { _sgt = _u; continue; }
+        if (_spec == undefined && squad_member_is_specialist(_u)) { _spec = _u; continue; }
+        if (_reg_heavy == undefined && marine_has_heavy_ranged(_u)) { _reg_heavy = _u; }
+        if (_reg_any == undefined) { _reg_any = _u; }
+    }
+    var _reg = (_reg_heavy != undefined) ? _reg_heavy : _reg_any;
+
+    var _picks = [];
+    if (_sgt != undefined)  { array_push(_picks, { unit: _sgt,  kind: "sergeant",   heavy: marine_has_heavy_ranged(_sgt) }); }
+    if (_spec != undefined) { array_push(_picks, { unit: _spec, kind: "specialist", heavy: marine_has_heavy_ranged(_spec) }); }
+    if (_reg != undefined)  { array_push(_picks, { unit: _reg,  kind: "regular",    heavy: marine_has_heavy_ranged(_reg) }); }
+    return _picks;
+};
+
 // Player squads in this system, with living members, not already committed to any battle.
 refresh_available = function() {
     available = [];

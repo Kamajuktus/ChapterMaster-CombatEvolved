@@ -1,8 +1,51 @@
-// Hard cap on how many marines may belong to a single squad, regardless of type.
+// Cap on how many marines may belong to a single command-type squad (HQ / institutions),
+// which legitimately hold several specialists.
 #macro SQUAD_MAX_MEMBERS 10
+// A line battle squad holds up to SQUAD_MAX_TROOPERS line troopers plus SQUAD_MAX_SPECIALISTS
+// attached specialist (11 total).
+#macro SQUAD_MAX_TROOPERS 10
+#macro SQUAD_MAX_SPECIALISTS 1
 
 function fetch_squad(array_id) {
     return obj_ini.squads[$ array_id];
+}
+
+// Whether a squad member counts as the squad's single attachable "specialist" (a command
+// character: Captain, Company Ancient/standard bearer, Company Champion, plus the branch
+// specialists -- Apothecary, Chaplain, Techmarine, Librarian, Codiciery, Lexicanum). Anyone
+// else (rank-and-file troopers and sergeants) counts as a line trooper.
+function squad_member_is_specialist(unit) {
+    return is_specialist(unit.role(), SPECIALISTS_COMMAND);
+}
+
+// Whether `unit` may join `squad` under the squad-capacity rules. Line battle squads allow up
+// to SQUAD_MAX_TROOPERS line troopers and SQUAD_MAX_SPECIALISTS attached specialist (11 total);
+// command-type squads (HQ / institutions) keep the flat SQUAD_MAX_MEMBERS cap so they may still
+// hold several specialists. A unit already in the squad is ignored (moving within doesn't count).
+function squad_has_room_for(squad, unit) {
+    if (squad.type == "command_squad") {
+        return array_length(squad.members) < SQUAD_MAX_MEMBERS;
+    }
+    var _troopers = 0;
+    var _specs = 0;
+    for (var i = 0; i < array_length(squad.members); i++) {
+        var _m = fetch_unit(squad.members[i]);
+        if (!is_struct(_m) || _m.name() == "") {
+            continue;
+        }
+        if (_m.company == unit.company && _m.marine_number == unit.marine_number) {
+            continue; // the incoming unit itself doesn't count against the move
+        }
+        if (squad_member_is_specialist(_m)) {
+            _specs++;
+        } else {
+            _troopers++;
+        }
+    }
+    if (squad_member_is_specialist(unit)) {
+        return _specs < SQUAD_MAX_SPECIALISTS;
+    }
+    return _troopers < SQUAD_MAX_TROOPERS;
 }
 
 function get_squad_ids() {
@@ -785,8 +828,8 @@ function move_marine_to_squad(unit, new_squad_uid) {
     if (!is_struct(_new_squad)) {
         return false;
     }
-    // A squad may hold at most SQUAD_MAX_MEMBERS marines.
-    if (array_length(_new_squad.members) >= SQUAD_MAX_MEMBERS) {
+    // A line squad holds up to 10 line troopers + 1 specialist; command squads keep the flat cap.
+    if (!squad_has_room_for(_new_squad, unit)) {
         return false;
     }
     // Dreadnoughts fight alone: nothing may join a dreadnought's squad, and a dreadnought may

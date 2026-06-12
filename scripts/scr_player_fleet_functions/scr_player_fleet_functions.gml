@@ -81,6 +81,10 @@ function cancel_fleet_movement() {
     action_y = 0;
     complex_route = [];
     just_left = false;
+    // Snapping back to the star also returns the fleet from the warp: restore its ships' (and
+    // their marines') location from "Warp" to the star, otherwise move-ship still reads "Warp".
+    orbiting = nearest_star;
+    set_fleet_location(nearest_star.name);
 }
 
 function set_new_player_fleet_course(target_array) {

@@ -725,8 +725,10 @@ function CompanyStruct(comp) constructor {
             var _mrow = 0;
             for (var _si = 0; _si < array_length(company_squads); _si++) {
                 var _ts = company_squads[_si];
-                // Skip the current squad, full squads, and dreadnought squads (none may join one).
-                if (_ts.uid == _cur_squad.uid || array_length(_ts.members) >= SQUAD_MAX_MEMBERS || squad_has_dreadnought(_ts)) {
+                // Skip the current squad, squads with no room for this marine, and dreadnought
+                // squads (none may join one). Room depends on the marine: a squad full of line
+                // troopers can still take a specialist, and vice versa.
+                if (_ts.uid == _cur_squad.uid || !squad_has_room_for(_ts, selected_unit) || squad_has_dreadnought(_ts)) {
                     continue;
                 }
                 if (point_and_click(draw_unit_buttons([_dx + 6, _dy + 6 + _mrow * 26], _ts.squad_name(), [1, 1], #50a076))) {

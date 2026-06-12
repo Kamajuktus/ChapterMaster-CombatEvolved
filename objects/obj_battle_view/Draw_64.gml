@@ -96,12 +96,13 @@ var pbot = floor(gh * 0.62);
 var rgap = 8;
 var rh = (pbot - ptop - rgap * (BATTLE_PLACES_MAX - 1)) / BATTLE_PLACES_MAX;
 
-var cwA = pw * 0.15, cwB = pw * 0.09, cwC = pw * 0.39, cwD = pw * 0.16, cwE = pw * 0.19;
+// Columns: A strategy/range | B add/deploy buttons | D place info | battlefield (marines vs enemies).
+var cwA = pw * 0.15, cwB = pw * 0.09, cwD = pw * 0.16;
 var caX = px0;
 var cbX = caX + cwA + 6;
-var ccX = cbX + cwB + 6;
-var cdX = ccX + cwC + 6;
-var ceX = cdX + cwD + 6;
+var cdX = cbX + cwB + 6;
+var bfX = cdX + cwD + 6;        // battlefield: marines on the left, enemies on the right
+var bfW = (px0 + pw) - bfX;
 
 for (var i = 0; i < BATTLE_PLACES_MAX; i++) {
     var py = ptop + i * (rh + rgap);
@@ -181,43 +182,6 @@ for (var i = 0; i < BATTLE_PLACES_MAX; i++) {
         }
     }
 
-    // --- Column C: deployed squads, grouped into ranged | neutral | melee sub-columns ---
-    draw_set_color(c_dkgray);
-    draw_rectangle(ccX, py, ccX + cwC, py + rh, true);
-    var _mu = _place.marine_squad_uids();
-    var _buckets = [[], [], []]; // 0 ranged, 1 neutral, 2 melee
-    for (var m = 0; m < array_length(_mu); m++) {
-        var _rr = squad_range_reduction(_mu[m]);
-        var _b = (_rr > 0.01) ? 2 : ((_rr < -0.01) ? 0 : 1);
-        array_push(_buckets[_b], _mu[m]);
-    }
-    var _subw = cwC / 3;
-    for (var _col = 0; _col < 3; _col++) {
-        var _sx = ccX + _col * _subw + 6;
-        var _list = _buckets[_col];
-        for (var r = 0; r < array_length(_list); r++) {
-            var _uid = _list[r];
-            var _sy2 = py + 8 + r * 22;
-            if (_sy2 + 18 > py + rh) {
-                break; // overflow: too many to show in this row
-            }
-            var _sqsel = (_uid == selected_squad && selected_from_place == i);
-            var _sbtn = draw_unit_buttons([_sx, _sy2], squad_battle_label(_uid), [1, 1], _sqsel ? c_yellow : squad_range_colour(_uid));
-            if (scr_hit(_sbtn[0], _sbtn[1], _sbtn[2], _sbtn[3])) {
-                hovered_squad = _uid;
-            }
-            if (point_and_click(_sbtn)) {
-                if (_sqsel) {
-                    selected_squad = "none";
-                    selected_from_place = -1;
-                } else {
-                    selected_squad = _uid;
-                    selected_from_place = i;
-                }
-            }
-        }
-    }
-
     // --- Column D: place role + terrain / range band / effect ---
     draw_set_color(c_dkgray);
     draw_rectangle(cdX, py, cdX + cwD, py + rh, true);
@@ -236,38 +200,183 @@ for (var i = 0; i < BATTLE_PLACES_MAX; i++) {
     draw_set_color(c_white);
     draw_text(cdX + 8, py + 28, $"Terrain: {_place.terrain}");
     draw_text(cdX + 8, py + 48, $"Range band: {string_format(_place.min_distance, 1, 2)} - {string_format(_place.max_distance, 1, 2)}");
-    draw_set_color(c_gray);
-    draw_text_ext(cdX + 8, py + 76, "Effect of place: --", 16, cwD - 16); // scaffolding
 
-    // --- Column E: enemy lineup / strategy / status (some scaffolding) ---
+    // --- Battlefield: marine squads on the LEFT (ranged at the back, melee at the front), enemy
+    //     squads on the RIGHT as yellow circles. The enemy line sits closer to the marine line the
+    //     shorter the engagement range, and pulls back as the range opens. ---
     draw_set_color(c_dkgray);
-    draw_rectangle(ceX, py, ceX + cwE, py + rh, true);
+    draw_rectangle(bfX, py, bfX + bfW, py + rh, true);
+    var _lane_y = py + 26;        // vertical centre of the dot line
+    var _range_frac = clamp(_place.distance, 0, 1); // 1 = long range (enemies far), 0 = melee (enemies close)
+
+    // Marines: order ranged -> neutral -> melee so ranged sit behind (left) and melee lead (right).
+    var _mu = _place.marine_squad_uids();
+    var _ranged_list = [], _neutral_list = [], _melee_list = [];
+    for (var m = 0; m < array_length(_mu); m++) {
+        var _rr = squad_range_reduction(_mu[m]);
+        if (_rr < -0.01)      { array_push(_ranged_list, _mu[m]); }
+        else if (_rr > 0.01)  { array_push(_melee_list, _mu[m]); }
+        else                  { array_push(_neutral_list, _mu[m]); }
+    }
+    var _ordered = [];
+    array_copy(_ordered, 0, _ranged_list, 0, array_length(_ranged_list));
+    array_copy(_ordered, array_length(_ordered), _neutral_list, 0, array_length(_neutral_list));
+    array_copy(_ordered, array_length(_ordered), _melee_list, 0, array_length(_melee_list));
+
+    var _mr = 9, _mstep_x = 26, _mstep_y = 36;
+    var _m_zone_w = bfW * 0.42;                          // marines occupy the left ~40%
+    var _m_cols = max(1, floor(_m_zone_w / _mstep_x));
+    var _marine_right = bfX + 14;                        // tracks the front (rightmost) marine edge
+    var _m_shown = 0;
+    for (var m = 0; m < array_length(_ordered); m++) {
+        var _uid = _ordered[m];
+        var _cx = bfX + 16 + (m mod _m_cols) * _mstep_x;
+        var _cy = _lane_y + (m div _m_cols) * _mstep_y;
+        // Overflow guard: leave room for the circle, its member strip, and the enemy text band.
+        if (_cy + _mr + 24 > py + rh - 54) { break; }
+        _m_shown++;
+        _marine_right = max(_marine_right, _cx + _mr);
+        var _sqsel = (_uid == selected_squad && selected_from_place == i);
+        draw_set_color(_sqsel ? c_yellow : squad_range_colour(_uid));
+        draw_circle(_cx, _cy, _mr, false);
+        draw_set_color(c_black);
+        draw_circle(_cx, _cy, _mr, true);
+        if (squad_gives_command_bonus(_uid)) {
+            draw_set_color(c_white);
+            draw_circle(_cx, _cy, _mr - 3, true);
+        }
+        // Company sign just above the circle (HQ / Roman company numeral / institution initial).
+        draw_set_font(fnt_40k_10);
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_bottom);
+        draw_set_color(c_white);
+        draw_text(_cx, _cy - _mr - 1, squad_company_tag(_uid));
+        // A few representative members beneath the circle: sergeant (white, "S"), the attached
+        // specialist if any (gold, role initial), and one regular (orange "H" if it carries the
+        // squad's heavy ranged weapon, otherwise grey "T").
+        var _picks = squad_roster_picks(_uid);
+        var _np = array_length(_picks);
+        var _chip_r = 3, _chip_gap = 9;
+        var _chip_x0 = _cx - ((_np - 1) * _chip_gap) * 0.5;
+        var _chip_y = _cy + _mr + 6;
+        draw_set_valign(fa_top);
+        for (var p = 0; p < _np; p++) {
+            var _pk = _picks[p];
+            var _ccol = c_white;
+            var _glyph = "S";
+            if (_pk.kind == "specialist") {
+                _ccol = c_yellow;
+                _glyph = string_char_at(_pk.unit.role(), 1);
+            } else if (_pk.kind == "regular") {
+                _ccol = _pk.heavy ? c_orange : make_colour_rgb(160, 160, 160);
+                _glyph = _pk.heavy ? "H" : "T";
+            }
+            var _chx = _chip_x0 + p * _chip_gap;
+            draw_set_color(_ccol);
+            draw_circle(_chx, _chip_y, _chip_r, false);
+            draw_set_color(c_black);
+            draw_circle(_chx, _chip_y, _chip_r, true);
+            draw_set_color(_ccol);
+            draw_text(_chx, _chip_y + _chip_r + 5, _glyph); // sits clear below the chip
+        }
+        draw_set_font(fnt_40k_14b);
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_top);
+        var _hit = [_cx - _mr, _cy - _mr, _cx + _mr, _cy + _mr];
+        if (scr_hit(_hit[0], _hit[1], _hit[2], _hit[3])) {
+            hovered_squad = _uid;
+        }
+        if (point_and_click(_hit)) {
+            if (_sqsel) { selected_squad = "none"; selected_from_place = -1; }
+            else { selected_squad = _uid; selected_from_place = i; }
+        }
+    }
+    // Note any marine squads that didn't fit the battlefield row(s). Sits in the gap to the
+    // right of the marine block so it never collides with the company signs above the circles.
+    if (_m_shown < array_length(_ordered)) {
+        draw_set_color(c_gray);
+        draw_set_halign(fa_left);
+        draw_text(bfX + _m_zone_w + 6, py + 8, $"+{array_length(_ordered) - _m_shown} more squads");
+    }
+
+    // Enemies: gather composition + per-type counts for the breakdown line.
     var _en = _place.enemy_squads();
+    var _ecount = array_length(_en);
     var _type_models = {};
-    var _any_heal = false, _any_armour = false, _melee_n = 0, _ranged_n = 0;
-    for (var e = 0; e < array_length(_en); e++) {
+    var _any_heal = false, _any_armour = false, _melee_n = 0, _ranged_n = 0, _total_models = 0;
+    for (var e = 0; e < _ecount; e++) {
         var _tn = _en[e].unit_name;
         _type_models[$ _tn] = (variable_struct_exists(_type_models, _tn) ? _type_models[$ _tn] : 0) + _en[e].model_count();
+        _total_models += _en[e].model_count();
         if (variable_struct_exists(_en[e], "healing") && _en[e].healing > 0) { _any_heal = true; }
         if (variable_struct_exists(_en[e], "damage_reduction") && _en[e].damage_reduction >= 0.3) { _any_armour = true; }
         if (_en[e].is_melee()) { _melee_n++; } else { _ranged_n++; }
     }
-    draw_set_color(c_orange);
-    var _ey = py + 8;
-    var _tkeys = struct_get_names(_type_models);
-    for (var k = 0; k < array_length(_tkeys); k++) {
-        draw_text(ceX + 8, _ey, $"{_type_models[$ _tkeys[k]]} x {_tkeys[k]}");
-        _ey += 18;
+    // Enemy line: as range closes (_close -> 1), the block slides left toward the marine front.
+    var _er = 7, _estep = 18;
+    var _e_block_w = bfW * 0.34;
+    var _e_cols = max(1, floor(_e_block_w / _estep));
+    var _e_min_left = _marine_right + 18;                       // melee contact
+    var _e_max_left = bfX + bfW - _e_block_w - 8;               // long range (far right)
+    var _e_left = _e_min_left + _range_frac * max(0, _e_max_left - _e_min_left);
+    if (_e_left > _e_max_left) { _e_left = max(_e_min_left, _e_max_left); }
+    var _e_max_rows = 3;
+    var _eshown = 0;
+    for (var e = 0; e < _ecount; e++) {
+        var _erow = _eshown div _e_cols;
+        if (_erow >= _e_max_rows) { break; }
+        var _ecx = _e_left + (_eshown mod _e_cols) * _estep;
+        var _ecy = _lane_y + _erow * _estep;
+        // Shape encodes the squad's nature by tag: flyers/cavalry -> triangle, vehicles (that are
+        // neither) -> square, everything else -> circle. Monstrous units draw larger; command
+        // units get a red outline.
+        var _es = _en[e];
+        var _r = _es.has_tag(eENEMY_TAG.MONSTROUS) ? (_er + 4) : _er;
+        var _outline = _es.has_tag(eENEMY_TAG.COMMAND) ? c_red : c_black;
+        if (_es.has_tag(eENEMY_TAG.FLYER) || _es.has_tag(eENEMY_TAG.CAVALRY)) {
+            // equilateral triangle (point up), vertices on a circle of radius _r
+            var _tx1 = _ecx + lengthdir_x(_r, 90),  _ty1 = _ecy + lengthdir_y(_r, 90);
+            var _tx2 = _ecx + lengthdir_x(_r, 210), _ty2 = _ecy + lengthdir_y(_r, 210);
+            var _tx3 = _ecx + lengthdir_x(_r, 330), _ty3 = _ecy + lengthdir_y(_r, 330);
+            draw_set_color(c_yellow);
+            draw_triangle(_tx1, _ty1, _tx2, _ty2, _tx3, _ty3, false);
+            draw_set_color(_outline);
+            draw_triangle(_tx1, _ty1, _tx2, _ty2, _tx3, _ty3, true);
+        } else if (_es.has_tag(eENEMY_TAG.VEHICLE)) {
+            draw_set_color(c_yellow);
+            draw_rectangle(_ecx - _r, _ecy - _r, _ecx + _r, _ecy + _r, false);
+            draw_set_color(_outline);
+            draw_rectangle(_ecx - _r, _ecy - _r, _ecx + _r, _ecy + _r, true);
+        } else {
+            draw_set_color(c_yellow);
+            draw_circle(_ecx, _ecy, _r, false);
+            draw_set_color(_outline);
+            draw_circle(_ecx, _ecy, _r, true);
+        }
+        _eshown++;
     }
-    // Enemy strategy + status, derived from composition (scaffolding for future explicit AI state).
+
+    // Enemy breakdown + count, then strategy/status, along the bottom of the battlefield.
+    var _tkeys = struct_get_names(_type_models);
+    var _breakdown = "";
+    for (var k = 0; k < array_length(_tkeys); k++) {
+        _breakdown += (k > 0 ? ", " : "") + $"{_type_models[$ _tkeys[k]]}x {_tkeys[k]}";
+    }
+    draw_set_color(c_orange);
+    if (_ecount > 0) {
+        var _more = (_eshown < _ecount) ? $" (+{_ecount - _eshown} more squads)" : "";
+        draw_text(bfX + 10, py + rh - 54, $"Enemy: {_ecount} squads, {_total_models} models{_more}");
+        draw_text_ext(bfX + 10, py + rh - 38, _breakdown, 16, bfW - 20);
+    }
     draw_set_color(c_gray);
     var _estrat = (_melee_n + _ranged_n == 0) ? "--" : ((_melee_n > _ranged_n) ? "Charging" : ((_ranged_n > _melee_n) ? "Holding the line" : "Mixed advance"));
-    draw_text(ceX + 8, py + rh - 40, $"Strategy: {_estrat}");
-    var _estatus = "--";
-    if (_any_heal && _any_armour) { _estatus = "Regenerating, Armoured"; }
-    else if (_any_heal) { _estatus = "Regenerating"; }
-    else if (_any_armour) { _estatus = "Armoured"; }
-    draw_text_ext(ceX + 8, py + rh - 22, $"Status: {_estatus}", 16, cwE - 16);
+    var _estatus = "";
+    if (_any_heal && _any_armour) { _estatus = " | Regenerating, Armoured"; }
+    else if (_any_heal) { _estatus = " | Regenerating"; }
+    else if (_any_armour) { _estatus = " | Armoured"; }
+    if (_ecount > 0) {
+        draw_text(bfX + 10, py + rh - 18, $"Strategy: {_estrat}{_estatus}");
+    }
 }
 
 // =======================================================================================

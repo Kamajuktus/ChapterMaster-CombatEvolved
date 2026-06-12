@@ -18,17 +18,30 @@
 // (Which unit is shot first is decided by range-reduction priority, not the vehicle tag.)
 #macro ENEMY_VEHICLE_HEALTH_MULT 2.0
 
+// Tag-interaction tuning. A marine wielding two dual-tagged weapons hits this much harder; polearms
+// deal this much bonus damage to cavalry (on top of bypassing their damage reduction).
+#macro DUAL_BONUS 1.3
+#macro POLEARM_CAV_BONUS 0.5
+
+// Specialist death-prevention / healing tuning. Each turn an apothecary can heal this much marine
+// hp in its place, and a standard/chaplain save patches the rescued marine up to this fraction of
+// its max health. Each save attempt succeeds on a d100 roll under the relevant stat
+// (apothecary intelligence, techmarine technology, standard/chaplain piety).
+#macro APOTHECARY_HEAL_AMOUNT 40
+#macro SAVE_HEAL_FRAC 0.01
+
 // Possible enemy unit tags. An enemy type's `tags` field is a list of these integers; helpers such
 // as EnemySquad.is_vehicle() test membership with array_contains. Add new categories here.
 enum eENEMY_TAG {
     VEHICLE,    // armour / war engines -- tougher hull (see ENEMY_VEHICLE_HEALTH_MULT)
-    INFANTRY,   // foot troops
-    MONSTROUS,  // monstrous creatures
-    FLYER,      // flying / fast skimmers
+    INFANTRY,   // foot troops -- hunt rank-and-file marines first
+    MONSTROUS,  // monstrous creatures -- hunt marine vehicles first
+    FLYER,      // flying / fast skimmers -- hunt the highest ranged-value marines first
     ELITE,      // elite / heavily-armoured infantry
     ARMOURED,
     COMMAND,
     CAVALRY,    // fast-moving shock troops (e.g. bikers)
+    SNIPER,     // marksman units -- hunt marine command (captains/masters/standards/specialists)
 }
 
 // Stance bonus added to a place's net distance reduction each turn: "push" drives the line in,
@@ -106,22 +119,22 @@ function faction_unit_types(faction) {
             {name: "Lootas",      tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.20, healing: 0, models: 300,  dist:  0.0001},
             {name: "Slugga Boyz", tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18,  damage: 24,   damage_reduction: 0.00, optimal: 0.50, healing: 0, models: 300,  dist:  0.0000},
             {name: "Tankbustas",  tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 18,  damage: 90,   damage_reduction: 0.00, optimal: 0.80, healing: 0, models: 100,  dist:  -0.0003},
-            {name: "Ard Boyz",    tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 18,  damage: 36,   damage_reduction: 0.10, optimal: 0.45, healing: 0, models: 300,  dist:  0.0000},
-            {name: "Ork Nobz",    tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 120,  damage: 90,  damage_reduction: 0.10, optimal: 0.50, healing: 0, models: 30,   dist:  0.0002},
+            {name: "Ard Boyz",    tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ARMOURED], tier: 2, max_health: 18,  damage: 36,   damage_reduction: 0.10, optimal: 0.45, healing: 0, models: 300,  dist:  0.0000},
+            {name: "Ork Nobz",    tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ARMOURED], tier: 2, max_health: 120,  damage: 90,  damage_reduction: 0.10, optimal: 0.50, healing: 0, models: 30,   dist:  0.0002},
             {name: "Warbikers",   tags: [eENEMY_TAG.CAVALRY], tier: 3, max_health: 32,  damage: 70,   damage_reduction: 0.10, optimal: 0.05, healing: 0, models: 60,  dist:  0.0008},
             {name: "Battlewagon", tags: [eENEMY_TAG.VEHICLE], tier: 3, max_health: 320,  damage: 460,   damage_reduction: 0.15, optimal: 0.25, healing: 0, models: 12,  dist:  0.0002},
             {name: "Deffkoptas",  tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.FLYER], tier: 4, max_health: 120,  damage: 460,   damage_reduction: 0.25, optimal: 0.70, healing: 0, models: 9,  dist:  -0.0012},
             {name: "Dakkajet",    tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.FLYER], tier: 4, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.55, healing: 0, models: 3,  dist:  -0.0012},
             {name: "Killa Kanz",  tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 320,  damage: 900,   damage_reduction: 0.25, optimal: 0.10, healing: 0, models: 5,  dist:  0.0010},
-            {name: "Meganobz",    tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ELITE], tier: 5, max_health: 120,  damage: 720,  damage_reduction: 0.40, optimal: 0.05, healing: 0, models: 15,  dist:  0.0002},
+            {name: "Meganobz",    tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ARMOURED, eENEMY_TAG.ELITE], tier: 5, max_health: 120,  damage: 720,  damage_reduction: 0.40, optimal: 0.05, healing: 0, models: 15,  dist:  0.0002},
             {name: "Deff Dreads", tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 1250,  damage: 3000,   damage_reduction: 0.50, optimal: 0.50, healing: 0, models: 1,  dist:  0.0010},
-            {name: "Gorkanauts",  tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.15, healing: 0, models: 1,  dist:  0.0010},
-            {name: "Morkanauts",  tags: [eENEMY_TAG.VEHICLE], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.75, healing: 0, models: 1,  dist:  0.0010},
+            {name: "Gorkanauts",  tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.MONSTROUS], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.15, healing: 0, models: 1,  dist:  0.0010},
+            {name: "Morkanauts",  tags: [eENEMY_TAG.VEHICLE, eENEMY_TAG.MONSTROUS], tier: 6, max_health: 3000,  damage: 3000,   damage_reduction: 0.50, optimal: 0.15, healing: 0, models: 1,  dist:  0.0010},
         ];
         case eFACTION.TYRANIDS: return [
             {name: "Neophytes",        tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 10,  damage: 21,  damage_reduction: 0.00, optimal: 0.50, healing: 0,  models: 500, dist:  0.0000},
             {name: "Gaunts",           tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 16,  damage: 21,  damage_reduction: 0.00, optimal: 0.05, healing: 0,  models: 600, dist:  0.0001},
-            {name: "Tyranid Warriors", tags: [eENEMY_TAG.INFANTRY], tier: 2, max_health: 75,  damage: 100, damage_reduction: 0.00, optimal: 0.05, healing: 10,  models: 40,  dist:  0.0002},
+            {name: "Tyranid Warriors", tags: [eENEMY_TAG.INFANTRY, eENEMY_TAG.ELITE], tier: 2, max_health: 75,  damage: 100, damage_reduction: 0.00, optimal: 0.05, healing: 10,  models: 40,  dist:  0.0002},
             {name: "Carnifexes",       tags: [eENEMY_TAG.MONSTROUS], tier: 3, max_health: 260, damage: 1000, damage_reduction: 0.00, optimal: 0.05, healing: 20, models: 4,   dist:  0.0003},
         ];
         case eFACTION.TAU: return [
@@ -131,36 +144,36 @@ function faction_unit_types(faction) {
             {name: "Broadsides",    tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 180, damage: 5000, damage_reduction: 0.10, optimal: 0.95, healing: 0, models: 3,  dist: -0.0006},
         ];
         case eFACTION.NECRONS: return [
-            {name: "Necron Warriors", tier: 1, max_health: 24, damage: 300, damage_reduction: 0.15, optimal: 0.70, healing: 4, models: 30, dist: -0.0001},
-            {name: "Immortals",       tier: 3, max_health: 42, damage: 57, damage_reduction: 0.40, optimal: 0.75, healing: 6, models: 15, dist: -0.0002},
-            {name: "Lychguard",       tier: 5, max_health: 64, damage: 800, damage_reduction: 0.60, optimal: 0.15, healing: 8, models: 8,  dist:  0.0004},
+            {name: "Necron Warriors", tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 24, damage: 300, damage_reduction: 0.15, optimal: 0.70, healing: 4, models: 30, dist: -0.0001},
+            {name: "Immortals",       tags: [eENEMY_TAG.INFANTRY], tier: 3, max_health: 42, damage: 57, damage_reduction: 0.40, optimal: 0.75, healing: 6, models: 15, dist: -0.0002},
+            {name: "Lychguard",       tags: [eENEMY_TAG.INFANTRY], tier: 5, max_health: 64, damage: 800, damage_reduction: 0.60, optimal: 0.15, healing: 8, models: 8,  dist:  0.0004},
         ];
         case eFACTION.ELDAR: return [
-            {name: "Guardians",     tier: 1, max_health: 18, damage: 240,  damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 30, dist: 0.0002},
-            {name: "Dire Avengers", tier: 3, max_health: 34, damage: 450, damage_reduction: 0.30, optimal: 0.50, healing: 0, models: 15, dist: 0.0000},
+            {name: "Guardians",     tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18, damage: 240,  damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 30, dist: 0.0002},
+            {name: "Dire Avengers", tags: [eENEMY_TAG.INFANTRY], tier: 3, max_health: 34, damage: 450, damage_reduction: 0.30, optimal: 0.50, healing: 0, models: 15, dist: 0.0000},
             {name: "Wraithguards",   tags: [eENEMY_TAG.VEHICLE], tier: 5, max_health: 60, damage: 810, damage_reduction: 0.30, optimal: 0.35, healing: 4, models: 8,  dist:  0.0002},
         ];
         case eFACTION.CHAOS: return [
-            {name: "Chaos Cultists",      tier: 1, max_health: 10,  damage: 12,   damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 500, dist:  0.000},
-            {name: "Chaos Space Marines", tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.50, healing: 5, models: 10,  dist:  0.0000},
-            {name: "Havocs",              tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.95, healing: 5, models: 10,  dist:  -0.0002},
-            {name: "Raptors",             tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.05, healing: 5, models: 10,  dist:  0.0002},
-            {name: "Chaos Terminators",   tier: 5, max_health: 400, damage: 600, damage_reduction: 0.60, optimal: 0.05, healing: 5, models: 5,   dist:  0.0003},
+            {name: "Chaos Cultists",      tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 10,  damage: 12,   damage_reduction: 0.00, optimal: 0.25, healing: 0, models: 500, dist:  0.000},
+            {name: "Chaos Space Marines", tags: [eENEMY_TAG.ARMOURED, eENEMY_TAG.INFANTRY], tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.50, healing: 5, models: 10,  dist:  0.0000},
+            {name: "Havocs",              tags: [eENEMY_TAG.ARMOURED, eENEMY_TAG.INFANTRY], tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.95, healing: 5, models: 10,  dist:  -0.0002},
+            {name: "Raptors",             tags: [eENEMY_TAG.ARMOURED, eENEMY_TAG.INFANTRY], tier: 3, max_health: 200, damage: 400,  damage_reduction: 0.40, optimal: 0.05, healing: 5, models: 10,  dist:  0.0002},
+            {name: "Chaos Terminators",   tags: [eENEMY_TAG.ARMOURED, eENEMY_TAG.ELITE], tier: 5, max_health: 400, damage: 600, damage_reduction: 0.60, optimal: 0.05, healing: 5, models: 5,   dist:  0.0003},
         ];
         case eFACTION.HERETICS: return [
-            {name: "Traitor Guards",    tier: 1, max_health: 15, damage: 21,  damage_reduction: 0.00, optimal: 0.60, healing: 0, models: 60, dist: -0.0008},
-            {name: "Renegade Marines", tier: 3, max_health: 40, damage: 54, damage_reduction: 0.15, optimal: 0.50, healing: 0, models: 18, dist:  0.001},
-            {name: "Chaos Spawns",      tier: 4, max_health: 70, damage: 96, damage_reduction: 0.10, optimal: 0.10, healing: 8, models: 6,  dist:  0.006},
+            {name: "Traitor Guards",    tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 15, damage: 21,  damage_reduction: 0.00, optimal: 0.60, healing: 0, models: 60, dist: -0.0008},
+            {name: "Renegade Marines", tags: [eENEMY_TAG.INFANTRY], tier: 3, max_health: 40, damage: 54, damage_reduction: 0.15, optimal: 0.50, healing: 0, models: 18, dist:  0.001},
+            {name: "Chaos Spawns",      tags: [eENEMY_TAG.INFANTRY], tier: 4, max_health: 70, damage: 96, damage_reduction: 0.10, optimal: 0.10, healing: 8, models: 6,  dist:  0.006},
         ];
         case eFACTION.IMPERIUM: return [
-            {name: "Guardsmen",        tier: 1, max_health: 15, damage: 21,  damage_reduction: 0.00, optimal: 0.60, healing: 0, models: 60, dist: -0.0008},
-            {name: "Tempestus Scions", tier: 3, max_health: 30, damage: 42, damage_reduction: 0.10, optimal: 0.70, healing: 0, models: 18, dist: -0.0016},
+            {name: "Guardsmen",        tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 15, damage: 21,  damage_reduction: 0.00, optimal: 0.60, healing: 0, models: 60, dist: -0.0008},
+            {name: "Tempestus Scions", tags: [eENEMY_TAG.INFANTRY], tier: 3, max_health: 30, damage: 42, damage_reduction: 0.10, optimal: 0.70, healing: 0, models: 18, dist: -0.0016},
         ];
         case eFACTION.ECCLESIARCHY: return [
-            {name: "Battle Sisters", tier: 1, max_health: 26, damage: 36, damage_reduction: 0.10, optimal: 0.55, healing: 0, models: 20, dist:  0.0004},
-            {name: "Seraphim",       tier: 3, max_health: 36, damage: 48, damage_reduction: 0.10, optimal: 0.30, healing: 0, models: 12, dist:  0.004},
+            {name: "Battle Sisters", tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 26, damage: 36, damage_reduction: 0.10, optimal: 0.55, healing: 0, models: 20, dist:  0.0004},
+            {name: "Seraphim",       tags: [eENEMY_TAG.INFANTRY], tier: 3, max_health: 36, damage: 48, damage_reduction: 0.10, optimal: 0.30, healing: 0, models: 12, dist:  0.004},
         ];
-        default: return [{name: "Hostiles", tier: 1, max_health: 18, damage: 8, damage_reduction: 0.00, optimal: 0.50, healing: 0, models: 30, dist: 0.001}];
+        default: return [{name: "Hostiles", tags: [eENEMY_TAG.INFANTRY], tier: 1, max_health: 18, damage: 8, damage_reduction: 0.00, optimal: 0.50, healing: 0, models: 30, dist: 0.001}];
     }
 }
 
@@ -271,9 +284,14 @@ function EnemySquad(faction, type_data = undefined, apply_buffs = true) construc
 
     // Applies incoming damage after this unit's damage_reduction. Returns the health actually lost.
     static take_damage = function(amount) {
-        var _net = amount * (1 - damage_reduction);
+        return take_net_damage(amount * (1 - damage_reduction));
+    };
+
+    // Removes an exact amount of health (already past any damage_reduction / bypass maths the
+    // caller did). Returns the health actually lost.
+    static take_net_damage = function(net) {
         var _before = health;
-        health = max(0, health - _net);
+        health = max(0, health - net);
         return _before - health;
     };
 
@@ -431,6 +449,13 @@ function BattleState(system, planet) constructor {
     objective_control_turns = 0;  // cumulative turns the objective has been held by CM/standard
     shift_timer = OBJECTIVE_SHIFT_TURNS; // turns until the objective shifts to another place
     shift_warning = false;        // true the turn before a shift (UI hint)
+
+    // Per-turn specialist save budgets (transient; reset each turn by resolve_planet_battle).
+    // used_savers: set of "company_marinenumber" keys for apothecaries/techmarines/chaplains spent
+    // this turn (each may attempt one save). standard_used: set of place indices whose standard has
+    // already averted a death this turn (the standard succeeds at most once per turn per place).
+    used_savers = {};
+    standard_used = {};
 
     // Upper bound on the number of enemy squads that can be fielded at once. Enemy squads are NOT
     // capped per place; this is just a high ceiling so the planet's force scalar (and the squads-
@@ -1062,13 +1087,18 @@ function marine_unit_combat_value(unit, distance = 0.5) {
 // unit's weapons contributes through ANY sweetspot that falls in the phase's band (a sweetspot
 // <= 0.25 is a melee sweetspot, otherwise ranged), so a combination weapon (e.g. the Boltstorm
 // Gauntlet) can fight in both phases. A weaponless marine falls back to a token melee value.
-function marine_phase_value(unit, distance, phase) {
+// A marine's best phase contribution AND the weapon that produced it, as { value, weapon }. The
+// weapon is returned so callers can read its tags (sniper/melta/las/polearm) for tag interactions.
+// A marine wielding two dual-tagged weapons hits harder (DUAL_BONUS).
+function marine_phase_best(unit, distance, phase) {
     if (!is_struct(unit) || unit.name() == "" || unit.hp() <= 0) {
-        return 0;
+        return {value: 0, weapon: ""};
     }
     var _ws = unit.weapon_skill, _bs = unit.ballistic_skill, _str = unit.strength;
-    var _weps = [unit.weapon_one(), unit.weapon_two()];
+    var _w1 = unit.weapon_one(), _w2 = unit.weapon_two();
+    var _weps = [_w1, _w2];
     var _best = 0;
+    var _best_w = "";
     var _has_any = false;
     for (var w = 0; w < array_length(_weps); w++) {
         if (weapon_name_string(_weps[w]) == "") {
@@ -1087,13 +1117,23 @@ function marine_phase_value(unit, distance, phase) {
             var _val = (1 + _stat / 20) * _eff;
             if (_val > _best) {
                 _best = _val;
+                _best_w = _weps[w];
             }
         }
     }
     if (_best <= 0 && !_has_any && phase == "melee") {
         _best = (1 + (_ws + _str) / 30) * 0.4; // unarmed: weak melee only
     }
-    return _best;
+    // Dual-wield bonus: both weapon slots occupied with dual-tagged weapons hit harder.
+    if (_best > 0 && array_contains(weapon_tag_list(_w1), "dual") && array_contains(weapon_tag_list(_w2), "dual")) {
+        _best *= DUAL_BONUS;
+    }
+    return {value: _best, weapon: _best_w};
+}
+
+// A marine's best phase contribution value (the combat power it adds in this phase).
+function marine_phase_value(unit, distance, phase) {
+    return marine_phase_best(unit, distance, phase).value;
 }
 
 // The most enemies a marine can kill in a given phase: the Max Kills of whichever of its weapons
@@ -1201,6 +1241,40 @@ function place_marine_phase_power(place, phase) {
     return _power;
 }
 
+// The marine side's attack profile for a phase: total power, plus how much of that power comes from
+// weapons with tags that trigger enemy interactions (melta / las / polearm), and whether any sniper
+// is present. The sub-powers let apply_damage_to_enemies bypass the right enemies' damage reduction.
+function place_marine_attack_profile(place, phase) {
+    var _d = place.distance;
+    var _p = {total: 0, melta: 0, las: 0, polearm: 0, has_sniper: false, has_bolt: false};
+    var _uids = place.marine_squad_uids();
+    for (var s = 0; s < array_length(_uids); s++) {
+        var _mems = marine_squad_living_members(_uids[s]);
+        for (var m = 0; m < array_length(_mems); m++) {
+            var _best = marine_phase_best(_mems[m], _d, phase);
+            if (_best.value <= 0) {
+                continue;
+            }
+            _p.total += _best.value;
+            var _t = weapon_tag_list(_best.weapon);
+            if (array_contains(_t, "melta"))   { _p.melta   += _best.value; }
+            if (array_contains(_t, "las"))     { _p.las     += _best.value; }
+            if (array_contains(_t, "polearm")) { _p.polearm += _best.value; }
+            if (array_contains(_t, "sniper"))  { _p.has_sniper = true; }
+            if (array_contains(_t, "bolt"))    { _p.has_bolt = true; }
+        }
+    }
+    // Vehicles add generic power (no special weapon-tag interactions modelled for them here).
+    var _vehs = place_vehicles(place);
+    for (var v = 0; v < array_length(_vehs); v++) {
+        var _veh_melee = (vehicle_optimal_distance(obj_ini.veh_role[_vehs[v][0]][_vehs[v][1]]) <= 0.4);
+        if ((phase == "melee") == _veh_melee) {
+            _p.total += vehicle_combat_value(_vehs[v][0], _vehs[v][1], _d);
+        }
+    }
+    return _p;
+}
+
 // An enemy side's combat output in a given phase: the damage_output of enemy squads whose range
 // sweetspot fits that phase (melee squads in the melee phase, gunline squads in the ranged phase).
 function place_enemy_phase_power(place, phase) {
@@ -1281,19 +1355,141 @@ function marine_range_priority_compare(a, b) {
     return 0;
 }
 
+// Sniper target priority: ELITE / COMMAND squads are hunted FIRST, and within each group the
+// highest range-reduction contributor is taken before the lowest.
+function enemy_sniper_priority_compare(a, b) {
+    var _ea = (a.has_tag(eENEMY_TAG.ELITE) || a.has_tag(eENEMY_TAG.COMMAND));
+    var _eb = (b.has_tag(eENEMY_TAG.ELITE) || b.has_tag(eENEMY_TAG.COMMAND));
+    if (_ea != _eb) { return _ea ? -1 : 1; } // elite / commander first
+    var _ra = a.distance_reduction();
+    var _rb = b.distance_reduction();
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+
+// Bolt-weapon target priority: INFANTRY squads first (bolters chew through infantry), then by
+// range-reduction. (A bolt weapon that is ALSO a sniper uses the sniper priority instead.)
+function enemy_infantry_priority_compare(a, b) {
+    var _ia = a.has_tag(eENEMY_TAG.INFANTRY);
+    var _ib = b.has_tag(eENEMY_TAG.INFANTRY);
+    if (_ia != _ib) { return _ia ? -1 : 1; } // infantry first
+    var _ra = a.distance_reduction();
+    var _rb = b.distance_reduction();
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+
+// --- Marine target classification (for enemy targeting priorities) -----------------------
+
+// A high-value marine target: a captain, institution master, company standard bearer, or any
+// command-tier specialist (apothecary/chaplain/techmarine/librarian/champion/ancient/etc.).
+function marine_is_high_value(unit) {
+    if (!is_struct(unit)) { return false; }
+    var _role = unit.role();
+    return is_specialist(_role, SPECIALISTS_COMMAND)
+        || is_specialist(_role, SPECIALISTS_HEADS)
+        || marine_carries_standard(unit);
+}
+
+// A marine's ranged attack value, used by flyers to pick the juiciest gun-line targets. Measured as
+// its ranged-phase combat value at a representative long range (distance-independent of the place).
+function marine_ranged_value(unit) {
+    return marine_phase_value(unit, 0.8, "ranged");
+}
+
+// Sniper enemies hunt marine command first (captains/masters/standards/specialists), then by
+// range-reduction within each group.
+function marine_highvalue_priority_compare(a, b) {
+    var _ha = marine_is_high_value(a);
+    var _hb = marine_is_high_value(b);
+    if (_ha != _hb) { return _ha ? -1 : 1; }
+    var _ra = marine_distance_reduction(a);
+    var _rb = marine_distance_reduction(b);
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+
+// Flyer enemies hunt the highest ranged-attack-value marines first (strafing the gun line).
+function marine_ranged_priority_compare(a, b) {
+    var _va = marine_ranged_value(a);
+    var _vb = marine_ranged_value(b);
+    if (_va < _vb) { return 1; }
+    if (_va > _vb) { return -1; }
+    return 0;
+}
+
+// Infantry enemies hunt rank-and-file (line) marines first, leaving command for last.
+function marine_line_priority_compare(a, b) {
+    var _ha = marine_is_high_value(a);
+    var _hb = marine_is_high_value(b);
+    if (_ha != _hb) { return _ha ? 1 : -1; } // line (non-command) first
+    var _ra = marine_distance_reduction(a);
+    var _rb = marine_distance_reduction(b);
+    if (_ra < _rb) { return 1; }
+    if (_ra > _rb) { return -1; }
+    return 0;
+}
+
+// How the enemy units firing FROM a place pick their marine targets, by tag precedence:
+//   sniper -> marine command; flyer -> highest ranged value; vehicle/monstrous -> marine vehicles
+//   (handled in apply_damage_to_vehicles); infantry -> line troopers; otherwise -> range-reduction.
+function enemy_target_mode(place) {
+    var _en = place.enemy_squads();
+    var _sniper = false, _flyer = false, _armour = false, _infantry = false;
+    for (var e = 0; e < array_length(_en); e++) {
+        var _u = _en[e];
+        if (_u.has_tag(eENEMY_TAG.SNIPER))    { _sniper = true; }
+        if (_u.has_tag(eENEMY_TAG.FLYER))     { _flyer = true; }
+        if (_u.has_tag(eENEMY_TAG.VEHICLE) || _u.has_tag(eENEMY_TAG.MONSTROUS)) { _armour = true; }
+        if (_u.has_tag(eENEMY_TAG.INFANTRY))  { _infantry = true; }
+    }
+    if (_sniper)   { return "sniper"; }
+    if (_flyer)    { return "flyer"; }
+    if (_armour)   { return "vehicle"; }
+    if (_infantry) { return "infantry"; }
+    return "range";
+}
+
+// The net-damage multiplier marine fire of a given weapon-tag mix deals to one enemy squad: starts
+// from the squad's damage reduction, but the melta / las / polearm fractions of the fire bypass
+// that reduction against the unit types they counter, and polearms deal bonus damage to cavalry.
+//   - melta  bypasses the DR of vehicles and armoured units
+//   - las    bypasses the DR of flyers and cavalry
+//   - polearm bypasses the DR of cavalry (and adds POLEARM_CAV_BONUS damage vs cavalry)
+function marine_damage_factor(squad, melta_frac, las_frac, polearm_frac) {
+    var _bypass = 0;
+    if (squad.has_tag(eENEMY_TAG.VEHICLE) || squad.has_tag(eENEMY_TAG.ARMOURED)) { _bypass += melta_frac; }
+    if (squad.has_tag(eENEMY_TAG.FLYER)   || squad.has_tag(eENEMY_TAG.CAVALRY))  { _bypass += las_frac; }
+    if (squad.has_tag(eENEMY_TAG.CAVALRY)) { _bypass += polearm_frac; }
+    _bypass = clamp(_bypass, 0, 1);
+    var _factor = 1 - squad.damage_reduction * (1 - _bypass);
+    if (squad.has_tag(eENEMY_TAG.CAVALRY)) {
+        _factor += polearm_frac * POLEARM_CAV_BONUS; // polearms savage cavalry
+    }
+    return _factor;
+}
+
 // Fire on the enemy squads in a place, prioritising those with the highest range-reduction
 // contribution: damage focus-fires the top-priority squad, spilling any overkill down the list, so
 // the lowest-contribution squads are hit last. Each squad mitigates by its own damage_reduction.
 // `kill_cap` limits how many enemy MODELS may be removed (Max Kills): if the focused fire would
 // kill more than that, it is scaled down so roughly kill_cap models fall. Returns total health
 // removed (for experience awards).
-function apply_damage_to_enemies(place, damage, kill_cap = infinity) {
+function apply_damage_to_enemies(place, damage, kill_cap = infinity, melta_frac = 0, las_frac = 0, polearm_frac = 0, target_mode = "range") {
     var _en = place.enemy_squads(); // fresh array -- safe to reorder for targeting priority
     var _n = array_length(_en);
     if (_n == 0) {
         return 0;
     }
-    array_sort(_en, enemy_range_priority_compare); // highest range-reduction first
+    // Target priority by the firing weapons: snipers hunt elite/commander, bolters hunt infantry,
+    // otherwise focus the highest range-reduction contributor.
+    var _cmp = enemy_range_priority_compare;
+    if (target_mode == "sniper")        { _cmp = enemy_sniper_priority_compare; }
+    else if (target_mode == "infantry") { _cmp = enemy_infantry_priority_compare; }
+    array_sort(_en, _cmp);
 
     // Max Kills: simulate the focus-fire and scale damage so at most ~kill_cap models fall.
     if (kill_cap < infinity) {
@@ -1301,38 +1497,161 @@ function apply_damage_to_enemies(place, damage, kill_cap = infinity) {
         var _dsim = damage;
         for (var e = 0; e < _n && _dsim > 0; e++) {
             var _eu = _en[e];
-            var _dr = _eu.damage_reduction;
-            var _net = _dsim * (1 - _dr);
+            var _factor = marine_damage_factor(_eu, melta_frac, las_frac, polearm_frac);
+            if (_factor <= 0) { continue; }
+            var _net = _dsim * _factor;
             var _new_health = max(0, _eu.health - _net);
             var _after = (_new_health <= 0) ? 0 : max(1, round(_eu.models * (_new_health / _eu.max_health)));
             _would_kill += max(0, _eu.model_count() - _after);
             var _hlost = _eu.health - _new_health;
-            _dsim -= ((1 - _dr) > 0) ? (_hlost / (1 - _dr)) : _dsim;
+            _dsim -= _hlost / _factor;
         }
         if (_would_kill > kill_cap && _would_kill > 0) {
             damage *= (kill_cap / _would_kill);
         }
     }
 
-    // Focus-fire down the priority list, spilling leftover damage to the next target.
+    // Focus-fire down the priority list, spilling leftover damage to the next target. Each squad's
+    // net loss is scaled by marine_damage_factor (its DR, minus any tag bypass, plus cavalry bonus).
     var _removed = 0;
     var _dleft = damage;
     for (var e = 0; e < _n && _dleft > 0; e++) {
         var _eu = _en[e];
-        var _dr = _eu.damage_reduction;
-        var _lost = _eu.take_damage(_dleft); // applies the squad's damage_reduction, caps at its health
-        _removed += _lost;
-        _dleft -= ((1 - _dr) > 0) ? (_lost / (1 - _dr)) : _dleft;
+        var _factor = marine_damage_factor(_eu, melta_frac, las_frac, polearm_frac);
+        if (_factor <= 0) { continue; }
+        var _net = min(_dleft * _factor, _eu.health);
+        _removed += _eu.take_net_damage(_net);
+        _dleft -= _net / _factor;
     }
     return _removed;
+}
+
+// --- Specialist death prevention / healing --------------------------------------------------
+
+// A d100 stat check: succeeds when a roll of 1..100 comes in at or under the unit's stat (0..100).
+function marine_stat_check(unit, stat_name) {
+    return roll_dice(1, 100) <= unit[$ stat_name];
+}
+
+// Unique per-turn key for a specialist, so each can be spent at most once a turn.
+function saver_key(unit) {
+    return string(unit.company) + "_" + string(unit.marine_number);
+}
+
+// All living marines currently deployed in a place.
+function place_living_marines(place) {
+    var _out = [];
+    var _uids = place.marine_squad_uids();
+    for (var s = 0; s < array_length(_uids); s++) {
+        var _mems = marine_squad_living_members(_uids[s]);
+        for (var m = 0; m < array_length(_mems); m++) {
+            array_push(_out, _mems[m]);
+        }
+    }
+    return _out;
+}
+
+// First living specialist of `group` in `members` not yet spent this turn (per used_savers).
+function place_find_unused_saver(battle_state, members, group) {
+    for (var i = 0; i < array_length(members); i++) {
+        var _u = members[i];
+        if (is_specialist(_u.role(), group) && !variable_struct_exists(battle_state.used_savers, saver_key(_u))) {
+            return _u;
+        }
+    }
+    return undefined;
+}
+
+// A rallied marine (saved by a standard or chaplain) clings on at SAVE_HEAL_FRAC of its max hp and
+// immediately makes one extra attack against the enemies sharing its place.
+function marine_rally_save(place, dying, phase) {
+    var _target_hp = max(1, ceil(dying.max_health() * SAVE_HEAL_FRAC));
+    dying.add_or_sub_health(_target_hp - dying.hp());
+    if (place.enemy_count() > 0) {
+        var _bonus = marine_phase_value(dying, place.distance, phase) * MARINE_DAMAGE_COEF;
+        if (_bonus > 0) {
+            apply_damage_to_enemies(place, _bonus, infinity);
+        }
+    }
+}
+
+// Attempts to save a marine about to die, trying sources in order: company standard (once per turn
+// per place, on the dying marine's faith) -> chaplain (each, on its own faith) -> apothecary (each,
+// on its intelligence). Standard/chaplain rally the marine (clings on + extra attack); an apothecary
+// puts it out of battle (fully stabilised). Each specialist is spent for the turn once attempted.
+// Returns true if the marine was saved.
+function attempt_marine_save(battle_state, place, dying, phase) {
+    var _members = place_living_marines(place);
+
+    // 1. Company standard -- place-level, succeeds at most once per turn, on the dying marine's faith.
+    if (!variable_struct_exists(battle_state.standard_used, string(place.index))) {
+        var _has_standard = false;
+        for (var i = 0; i < array_length(_members); i++) {
+            if (marine_carries_standard(_members[i])) { _has_standard = true; break; }
+        }
+        if (_has_standard && marine_stat_check(dying, "piety")) {
+            battle_state.standard_used[$ string(place.index)] = true;
+            marine_rally_save(place, dying, phase);
+            return true;
+        }
+    }
+
+    // 2. Chaplain -- each may attempt once, on its own faith.
+    var _chap = place_find_unused_saver(battle_state, _members, SPECIALISTS_CHAPLAINS);
+    if (_chap != undefined) {
+        battle_state.used_savers[$ saver_key(_chap)] = true;
+        if (marine_stat_check(_chap, "piety")) {
+            marine_rally_save(place, dying, phase);
+            return true;
+        }
+    }
+
+    // 3. Apothecary -- each may attempt once, on its intelligence; stabilises the dying marine so
+    //    it survives the wound (clinging on at low hp), rather than removing it from battle.
+    var _apo = place_find_unused_saver(battle_state, _members, SPECIALISTS_APOTHECARIES);
+    if (_apo != undefined) {
+        battle_state.used_savers[$ saver_key(_apo)] = true;
+        if (marine_stat_check(_apo, "intelligence")) {
+            var _stab = max(1, ceil(dying.max_health() * SAVE_HEAL_FRAC));
+            dying.add_or_sub_health(_stab - dying.hp()); // stabilised -- survives at low hp
+            return true;
+        }
+    }
+    return false;
+}
+
+// True if a living apothecary is deployed in the place (used for gene-seed recovery on death).
+function place_has_apothecary(place) {
+    var _members = place_living_marines(place);
+    for (var i = 0; i < array_length(_members); i++) {
+        if (is_specialist(_members[i].role(), SPECIALISTS_APOTHECARIES)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Attempts a techmarine save of a vehicle about to be destroyed: an unspent techmarine in the place
+// rolls technology; on success the vehicle is preserved (repaired / out of battle).
+function attempt_vehicle_save(battle_state, place) {
+    var _members = place_living_marines(place);
+    var _tech = place_find_unused_saver(battle_state, _members, SPECIALISTS_TECHMARINES);
+    if (_tech != undefined) {
+        battle_state.used_savers[$ saver_key(_tech)] = true;
+        if (marine_stat_check(_tech, "technology")) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Enemy fire falls on the living marines in a place, prioritising those with the highest range-
 // reduction contribution: it focus-fires the top-priority marine (killing it and spilling overkill
 // to the next), so the lowest-contribution marines are hit last. No more than `kill_cap` marines
 // may die this phase (the enemy's Max Kills); once that is reached the current target clings on at
-// 1 hp and the rest are spared this exchange.
-function apply_damage_to_marines(place, damage, kill_cap = infinity) {
+// 1 hp and the rest are spared this exchange. Before a marine dies, specialist saves are attempted
+// (see attempt_marine_save). `battle_state` carries the per-turn save budgets.
+function apply_damage_to_marines(place, damage, kill_cap = infinity, target_mode = "range", battle_state = undefined, phase = "ranged") {
     var _members = [];
     var _uids = place.marine_squad_uids();
     for (var s = 0; s < array_length(_uids); s++) {
@@ -1345,7 +1664,17 @@ function apply_damage_to_marines(place, damage, kill_cap = infinity) {
     if (_n == 0) {
         return;
     }
-    array_sort(_members, marine_range_priority_compare); // highest range-reduction first
+    // Target priority set by the firing enemies (enemy_target_mode): snipers hunt marine command,
+    // flyers hunt the gun line, infantry hunt line troopers; otherwise focus by range-reduction.
+    // ("vehicle" mode prioritises marine vehicles, handled in apply_damage_to_vehicles.)
+    var _cmp = marine_range_priority_compare;
+    if (target_mode == "sniper")        { _cmp = marine_highvalue_priority_compare; }
+    else if (target_mode == "flyer")    { _cmp = marine_ranged_priority_compare; }
+    else if (target_mode == "infantry") { _cmp = marine_line_priority_compare; }
+    array_sort(_members, _cmp);
+
+    // Gene-seed is only recovered from the fallen while a living apothecary is present to harvest it.
+    var _can_recover_geneseed = place_has_apothecary(place);
 
     var _deaths = 0;
     var _dleft = damage;
@@ -1358,8 +1687,13 @@ function apply_damage_to_marines(place, damage, kill_cap = infinity) {
                 _u.add_or_sub_health(1 - _hp); // Max Kills reached: clings on at 1 hp, fire stops here
                 break;
             }
+            // A specialist (standard / chaplain / apothecary) may avert the death.
+            if (battle_state != undefined && attempt_marine_save(battle_state, place, _u, phase)) {
+                _dleft -= _hp; // the lethal hit is spent; the save handled the survivor
+                continue;
+            }
             _u.add_or_sub_health(-_hp);
-            kill_and_recover(_u.company, _u.marine_number, true, true);
+            kill_and_recover(_u.company, _u.marine_number, true, _can_recover_geneseed);
             _deaths++;
             _dleft -= _hp; // overkill spills to the next priority marine
         } else {
@@ -1369,8 +1703,9 @@ function apply_damage_to_marines(place, damage, kill_cap = infinity) {
     }
 }
 
-// Spreads a share of incoming damage across the place's vehicles; destroys any at <= 0 hull.
-function apply_damage_to_vehicles(place, damage) {
+// Spreads a share of incoming damage across the place's vehicles; destroys any at <= 0 hull, unless
+// an unspent techmarine saves it (rolls technology). `battle_state` carries the per-turn budgets.
+function apply_damage_to_vehicles(place, damage, battle_state = undefined) {
     var _vehs = place_vehicles(place);
     var _n = array_length(_vehs);
     if (_n == 0) {
@@ -1381,7 +1716,11 @@ function apply_damage_to_vehicles(place, damage) {
         var _co = _vehs[i][0], _slot = _vehs[i][1];
         obj_ini.veh_hp[_co][_slot] -= _share;
         if (obj_ini.veh_hp[_co][_slot] <= 0) {
-            destroy_vehicle(_co, _slot);
+            if (battle_state != undefined && attempt_vehicle_save(battle_state, place)) {
+                obj_ini.veh_hp[_co][_slot] = 100; // repaired to full hull -- out of battle
+            } else {
+                destroy_vehicle(_co, _slot);
+            }
         }
     }
 }
@@ -1455,26 +1794,37 @@ function resolve_battle_phase(battle_state, phase) {
     var _n = array_length(_places);
     for (var i = 0; i < _n; i++) {
         var P = _places[i];
-        // Marines in P fire on enemies (here, or the lighter adjacent place).
+        // Marines in P fire on enemies (here, or the lighter adjacent place). The attack profile
+        // carries the weapon-tag mix so melta/las/polearm fire bypasses the right enemies' damage
+        // reduction, and snipers redirect the focus onto elite/commander squads.
         var _etarget = combat_target_place(battle_state, i, "enemies");
         if (_etarget != undefined) {
-            var _m_power = place_marine_phase_power(P, phase);
-            if (_m_power > 0) {
-                var _enemy_damage = _m_power * MARINE_DAMAGE_COEF * random_range(0.8, 1.2);
+            var _profile = place_marine_attack_profile(P, phase);
+            if (_profile.total > 0) {
+                var _enemy_damage = _profile.total * MARINE_DAMAGE_COEF * random_range(0.8, 1.2);
                 var _marine_kill_cap = place_marine_phase_kill_cap(P, phase);
-                var _removed = apply_damage_to_enemies(_etarget, _enemy_damage, _marine_kill_cap);
+                var _mf = _profile.melta / _profile.total;
+                var _lf = _profile.las / _profile.total;
+                var _pf = _profile.polearm / _profile.total;
+                // Snipers pick command/elite; otherwise bolters hunt infantry; otherwise range.
+                var _mode = _profile.has_sniper ? "sniper" : (_profile.has_bolt ? "infantry" : "range");
+                var _removed = apply_damage_to_enemies(_etarget, _enemy_damage, _marine_kill_cap, _mf, _lf, _pf, _mode);
                 award_place_experience(P, _removed);
             }
         }
-        // Enemies in P fall on marines (here, or the lighter adjacent place).
+        // Enemies in P fall on marines (here, or the lighter adjacent place). The enemy units' tags
+        // set who they hunt (snipers -> command, flyers -> gun line, infantry -> line troopers,
+        // vehicles/monstrous -> marine vehicles).
         var _mtarget = combat_target_place(battle_state, i, "marines");
         if (_mtarget != undefined) {
             var _e_power = place_enemy_phase_power(P, phase);
             if (_e_power > 0) {
                 var _marine_damage = _e_power * ENEMY_DAMAGE_COEF * random_range(0.8, 1.2);
                 var _enemy_kill_cap = place_enemy_phase_kill_cap(P, phase);
-                apply_damage_to_marines(_mtarget, _marine_damage, _enemy_kill_cap);
-                apply_damage_to_vehicles(_mtarget, _marine_damage * 0.85);
+                var _emode = enemy_target_mode(P);
+                apply_damage_to_marines(_mtarget, _marine_damage, _enemy_kill_cap, _emode, battle_state, phase);
+                // Vehicle/monstrous enemies concentrate on armour: marine vehicles draw the full hit.
+                apply_damage_to_vehicles(_mtarget, _marine_damage * (_emode == "vehicle" ? 1.0 : 0.85), battle_state);
             }
         }
     }
@@ -1578,6 +1928,29 @@ function system_battle_summaries(system) {
 // any amount that would exceed its max spills over to the most-wounded other enemy squad(s) in
 // the same place (and so on) until the heal is spent or every squad is at full health.
 function resolve_place_healing(place) {
+    // Apothecaries patch up wounded marines (and themselves) in their place each turn.
+    var _marines = place_living_marines(place);
+    var _apo_count = 0;
+    for (var m = 0; m < array_length(_marines); m++) {
+        if (is_specialist(_marines[m].role(), SPECIALISTS_APOTHECARIES)) { _apo_count++; }
+    }
+    if (_apo_count > 0) {
+        var _heal_pool = _apo_count * APOTHECARY_HEAL_AMOUNT;
+        var _hguard = 0;
+        while (_heal_pool > 0 && _hguard < 500) {
+            _hguard++;
+            var _wt = undefined, _wmiss = 0;
+            for (var m = 0; m < array_length(_marines); m++) {
+                var _miss = _marines[m].max_health() - _marines[m].hp();
+                if (_miss > _wmiss) { _wmiss = _miss; _wt = _marines[m]; }
+            }
+            if (_wt == undefined) { break; } // every marine at full health
+            var _apply = min(_heal_pool, _wmiss);
+            _wt.add_or_sub_health(_apply);
+            _heal_pool -= _apply;
+        }
+    }
+
     var _en = place.enemy_squads();
     var _n = array_length(_en);
     if (_n == 0) {
@@ -1988,6 +2361,11 @@ function resolve_planet_battle(system, planet) {
     }
     var _bs = _pdata.battle_state();
     repair_battle_enemy_squads(_bs); // migrate any pre-rewrite enemy squads still in memory
+
+    // Reset this turn's specialist save budgets (each apothecary/techmarine/chaplain may attempt one
+    // save, and each place's standard may avert one death).
+    _bs.used_savers = {};
+    _bs.standard_used = {};
 
     var _m_before = _bs.total_marines();
     var _e_before = _bs.total_enemies();
